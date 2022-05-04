@@ -414,3 +414,18 @@ pub struct SyncSendIfSend<T> {
 
 unsafe impl<T: Send> Sync for SyncSendIfSend<T> {}
 unsafe impl<T: Send> Send for SyncSendIfSend<T> {}
+
+trait SpeccedFn<Args, Output> {
+    fn requires(args: Args) -> bool;
+    fn ensures(args: Args, output: Output) -> bool;
+}
+
+impl<Args, Output, F: Fn(Args) -> Output> SpeccedFn<Args, Output> for F { 
+    fn requires(args: Args) -> bool {
+        unimplemented!();
+    }
+
+    fn ensures(args: Args, output: Output) -> bool {
+        unimplemented!();
+    }
+}
