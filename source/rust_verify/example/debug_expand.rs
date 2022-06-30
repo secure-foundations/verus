@@ -124,13 +124,17 @@ proof fn test_expansion_multiple_call() {
 // example5: negation
 spec fn is_good_integer_5(x: int) -> bool 
 {
-  !(x < 0 || x == 5)
+    !(x < 0 || !(x != 5))
+//  |          | ^^^^^^
+//  |          This leftmost boolean-not negated the highlighted expression
+//  This leftmost boolean-not negated the highlighted expression
 }
 
 proof fn test_expansion_negate() 
 {
   let x = 5;
   assert(is_good_integer(x));
+//^^^^^^ ^^^^^^^^^^^^^^^^^^
 }
 
 

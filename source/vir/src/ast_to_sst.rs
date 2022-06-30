@@ -684,10 +684,21 @@ fn tr_split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
     // TODO: should do recursive call
     // TODO: add `position`.
     //       when '!position`, 1)  split on `OR`.  2) use `and` instead of `->` for ite.  3) for implies, change
-    // assert exp.typ == bool
+    match *exp.e.typ {
+        TypX::Bool => (),
+        _ => panic!("cannot split non boolean expression"),
+    }
     match &exp.e.x {
         ExpX::Unary(UnaryOp::Not, e1) => {
-            return tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), !negated);
+            let tr_exp = TracedExpX::new(
+                e1.clone(),
+                exp.trace.secondary_label(
+                    &exp.e.span,
+                    "This leftmost boolean-not negated the highlighted expression",
+                ),
+            );
+            return tr_split_expr(ctx, &tr_exp, !negated);
+            // return tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), !negated);
         }
         ExpX::Binary(bop, e1, e2) => {
             match bop {
@@ -700,7 +711,6 @@ fn tr_split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
                 }
                 // apply DeMorgan's Law
                 BinaryOp::Or if negated => {
-                    println!("apply demorgan");
                     let es1 =
                         tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), true);
                     let es2 =
