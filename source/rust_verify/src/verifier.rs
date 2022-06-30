@@ -334,7 +334,9 @@ impl Verifier {
                                 local_decls,
                             );
 
-                            debugger.start_shell(air_context);
+                            // TODO: move this to more appropriate location
+                            // for now, this is commented to focus on error localization encoding
+                            // debugger.start_shell(air_context);
                         }
                     }
 

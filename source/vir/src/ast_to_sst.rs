@@ -554,66 +554,88 @@ fn is_small_exp_or_loc(exp: &Exp) -> bool {
     }
 }
 
-fn subsitute_argument(exp: &Exp, arg_map: &HashMap<Arc<String>, Exp>) -> Exp {
-    match &exp.x {
-        ExpX::Var((id, _num)) => match arg_map.get(id) {
-            Some(e) => e.clone(),
-            None => exp.clone(),
-        },
+fn subsitute_argument(
+    exp: &Exp,
+    arg_map: &HashMap<Arc<String>, Exp>,
+) -> Result<Exp, (Span, String)> {
+    let result = match &exp.x {
+        ExpX::Var((id, _num)) => {
+            // println!("id: {:?}", id);
+            match arg_map.get(id) {
+                Some(e) => e.clone(),
+                None => exp.clone(),
+            }
+        }
         ExpX::Call(x, typs, es) => {
             let mut es_replaced = vec![];
             for e in es.iter() {
-                let e_replaced = subsitute_argument(e, arg_map);
+                let e_replaced = subsitute_argument(e, arg_map)?;
                 es_replaced.push(e_replaced);
             }
             let new_exp = ExpX::Call(x.clone(), typs.clone(), Arc::new(es_replaced));
             SpannedTyped::new(&exp.span, &exp.typ, new_exp)
         }
         ExpX::Unary(op, e1) => {
-            let e1_replaced = subsitute_argument(e1, arg_map);
+            let e1_replaced = subsitute_argument(e1, arg_map)?;
             let new_exp = ExpX::Unary(*op, e1_replaced);
             SpannedTyped::new(&exp.span, &exp.typ, new_exp)
         }
         ExpX::UnaryOpr(uop, e1) => {
-            let e1_replaced = subsitute_argument(e1, arg_map);
+            let e1_replaced = subsitute_argument(e1, arg_map)?;
             let new_exp = ExpX::UnaryOpr(uop.clone(), e1_replaced);
             SpannedTyped::new(&exp.span, &exp.typ, new_exp)
         }
         ExpX::Binary(bop, e1, e2) => {
-            let e1_replaced = subsitute_argument(e1, arg_map);
-            let e2_replaced = subsitute_argument(e2, arg_map);
+            let e1_replaced = subsitute_argument(e1, arg_map)?;
+            let e2_replaced = subsitute_argument(e2, arg_map)?;
             let new_exp = ExpX::Binary(*bop, e1_replaced, e2_replaced);
             SpannedTyped::new(&exp.span, &exp.typ, new_exp)
         }
         ExpX::If(e1, e2, e3) => {
-            let e1_replaced = subsitute_argument(e1, arg_map);
-            let e2_replaced = subsitute_argument(e2, arg_map);
-            let e3_replaced = subsitute_argument(e3, arg_map);
+            let e1_replaced = subsitute_argument(e1, arg_map)?;
+            let e2_replaced = subsitute_argument(e2, arg_map)?;
+            let e3_replaced = subsitute_argument(e3, arg_map)?;
             let new_exp = ExpX::If(e1_replaced, e2_replaced, e3_replaced);
             SpannedTyped::new(&exp.span, &exp.typ, new_exp)
         }
         ExpX::Bind(bnd, e1) => {
-            let e1_replaced = subsitute_argument(e1, arg_map);
+            // TODO: check if binded name and  `var to replace` is same
+            let e1_replaced = subsitute_argument(e1, arg_map)?;
             let bnd_replaced: Bnd = match &bnd.x {
                 BndX::Let(binders) => {
-                    // check if binded name and  `var to replace` is same
                     let mut new_binders: Vec<Binder<Exp>> = vec![];
                     for old_b in &**binders {
                         let new_b = BinderX {
                             name: old_b.name.clone(),
-                            a: subsitute_argument(&old_b.a, arg_map),
+                            a: subsitute_argument(&old_b.a, arg_map)?,
                         };
                         new_binders.push(Arc::new(new_b));
                     }
                     Spanned::new(bnd.span.clone(), BndX::Let(Arc::new(new_binders)))
                 }
-                _ => panic!("TODO binders"),
+                BndX::Quant(quant, bndrs, trigs) => {
+                    // replace vars in trigger
+                    let mut replaced_trigs: Vec<crate::sst::Trig> = vec![];
+                    for ts in &***trigs {
+                        let mut replaced_ts: Vec<Exp> = vec![];
+                        for t in &**ts {
+                            replaced_ts.push(subsitute_argument(t, arg_map)?);
+                        }
+                        replaced_trigs.push(Arc::new(replaced_ts));
+                    }
+                    Spanned::new(
+                        bnd.span.clone(),
+                        BndX::Quant(quant.clone(), bndrs.clone(), Arc::new(replaced_trigs)),
+                    )
+                }
+                _ => return Err((exp.span.clone(), format!("TODO: binders, subsitute_argument"))),
             };
             let new_exp = ExpX::Bind(bnd_replaced, e1_replaced);
             SpannedTyped::new(&exp.span, &exp.typ, new_exp)
         }
-        ExpX::Const(_) | ExpX::WithTriggers(_, _) => exp.clone(),
+        ExpX::Const(_) => exp.clone(),
         _ => {
+            // | ExpX::WithTriggers(_, _) => exp.clone()
             // VarLoc(UniqueIdent),
             // VarAt(UniqueIdent, VarAt),
             // Loc(Exp),
@@ -621,14 +643,19 @@ fn subsitute_argument(exp: &Exp, arg_map: &HashMap<Arc<String>, Exp>) -> Exp {
             // CallLambda(Typ, Exp, Exps),
             // Ctor(Path, Ident, Binders<Exp>),
             // WithTriggers(Trigs, Exp),
-            println!("TODO: unsubsituted: {:?}", exp.x);
-            panic!();
+            return Err((exp.span.clone(), format!("TODO: unsubsituted exp,subsitute_argument ")));
         }
-    }
+    };
+    Ok(result)
 }
 
 // simply inline, the caller of `inline` should call `split_expr` with the inlined expr.
-fn tr_inline_function(ctx: &Ctx, fun: Function, exps: &Exps) -> Exp {
+fn tr_inline_function(ctx: &Ctx, fun: Function, exps: &Exps) -> Result<Exp, (Span, String)> {
+    // TODO: check the visibility of the function
+    //       when the function is not visible, remind the user that it is not visible
+    // then return Err
+    // let visibile = fun.x.attrs.hidden;    // `fun` here should be the holder of the failing assertion
+
     let body = fun.x.body.as_ref().unwrap();
     let params = &fun.x.params;
     let pars = crate::func_to_air::params_to_pars(params, false);
@@ -642,10 +669,32 @@ fn tr_inline_function(ctx: &Ctx, fun: Function, exps: &Exps) -> Exp {
     let mut arg_map: HashMap<Arc<String>, Exp> = HashMap::new();
     let mut count = 0;
     for param in &**params {
-        println!("{:?}", param.x.name);
-        arg_map.insert(param.x.name.clone(), exps[count].clone());
+        let exp_to_insert = &exps[count];
+
+        // println!("{:?}", param.x.name);
+        // println!("{:?}", exp_to_insert.x);
+        // println!("{:?}, {:?}", &*param.x.typ, &*exp_to_insert.typ);
+        match (&*param.x.typ, &*exp_to_insert.typ) {
+            (TypX::Bool, TypX::Bool) |
+            (TypX::Int(_),TypX::Int(_)) |
+            (TypX::Tuple(_), TypX::Tuple(_)) |
+            (TypX::Tuple(_), TypX::Tuple(_)) |
+            (TypX::Lambda(_, _), TypX::Lambda(_,_)) |
+            (TypX::Datatype(_, _), TypX::Datatype(_,_)) |
+            // TODO: recursive check instead
+            (TypX::Boxed(_), TypX::Boxed(_)) |
+            (TypX::TypParam(_), TypX::TypParam(_)) |
+            (TypX::TypeId, TypX::TypeId) |
+            (TypX::Air(_), TypX::Air(_)) => (),
+            _ => return Err((exp_to_insert.span.clone(), "TODO: arg type mismatch during function inlining".to_string())),
+        }
+        arg_map.insert(param.x.name.clone(), exp_to_insert.clone());
         count = count + 1;
     }
+    // for (k,v) in &arg_map {
+    //     println!("{:?} , {:?}", k , v);
+    // }
+    // // println!("subsitute {:?} args", arg_map.len());
     return subsitute_argument(&body_exp, &arg_map);
 }
 
@@ -679,11 +728,9 @@ fn merge_two_es(es1: TracedExps, es2: TracedExps) -> TracedExps {
     return Arc::new(merged_vec);
 }
 
-// Note: this splitting referenced Dafny - https://github.com/dafny-lang/dafny/blob/cf285b9282499c46eb24f05c7ecc7c72423cd878/Source/Dafny/Verifier/Translator.cs#L11100
-fn tr_split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
-    // TODO: should do recursive call
-    // TODO: add `position`.
-    //       when '!position`, 1)  split on `OR`.  2) use `and` instead of `->` for ite.  3) for implies, change
+// Note: this splitting referenced Dafny
+// https://github.com/dafny-lang/dafny/blob/cf285b9282499c46eb24f05c7ecc7c72423cd878/Source/Dafny/Verifier/Translator.cs#L11100
+fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
     match *exp.e.typ {
         TypX::Bool => (),
         _ => panic!("cannot split non boolean expression"),
@@ -697,33 +744,29 @@ fn tr_split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
                     "This leftmost boolean-not negated the highlighted expression",
                 ),
             );
-            return tr_split_expr(ctx, &tr_exp, !negated);
-            // return tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), !negated);
+            return split_expr(ctx, &tr_exp, !negated);
         }
         ExpX::Binary(bop, e1, e2) => {
             match bop {
                 BinaryOp::And if !negated => {
                     let es1 =
-                        tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), false);
+                        split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), false);
                     let es2 =
-                        tr_split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), false);
+                        split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), false);
                     return merge_two_es(es1, es2);
                 }
                 // apply DeMorgan's Law
                 BinaryOp::Or if negated => {
                     let es1 =
-                        tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), true);
+                        split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), true);
                     let es2 =
-                        tr_split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), true);
+                        split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), true);
                     return merge_two_es(es1, es2);
                 }
                 // in case of implies, split rhs. (e.g.  A => (B && C)  to  [ (A => B) , (A => C) ] )
                 BinaryOp::Implies if !negated => {
-                    let es2 = tr_split_expr(
-                        ctx,
-                        &TracedExpX::new(e2.clone(), exp.trace.clone()),
-                        negated,
-                    );
+                    let es2 =
+                        split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), negated);
                     let mut splitted: Vec<TracedExp> = vec![];
                     for e in &*es2 {
                         let new_e = ExpX::Binary(BinaryOp::Implies, e1.clone(), e.e.clone());
@@ -733,20 +776,36 @@ fn tr_split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
                     }
                     return Arc::new(splitted);
                 }
+                // TODO
+                // BinaryOp::Implies if negated
                 _ if negated => return Arc::new(vec![negate_atom(exp)]),
                 _ => return Arc::new(vec![exp.clone()]),
             }
         }
-        // TODO: check the visibility of the function
-        //       when the function is not visible, remind the user that it is not visible
         ExpX::Call(fun_name, typs, exps) => {
             let fun = get_function(ctx, &exp.e.span, fun_name).unwrap();
-            let inlined_exp = tr_inline_function(ctx, fun, exps);
-            let inlined_tr_exp = TracedExpX::new(
-                inlined_exp,
-                exp.trace.primary_label(&exp.e.span, "TODO: pretty print inlined expr"),
-            );
-            return tr_split_expr(ctx, &inlined_tr_exp, negated);
+            let res_inlined_exp = tr_inline_function(ctx, fun, exps);
+            match res_inlined_exp {
+                Ok(inlined_exp) => {
+                    // println!("inlined exp: {:?}", inlined_exp);
+                    let inlined_tr_exp = TracedExpX::new(
+                        inlined_exp,
+                        exp.trace.primary_label(&exp.e.span, "TODO: pretty print inlined expr"),
+                    );
+                    return split_expr(ctx, &inlined_tr_exp, negated);
+                }
+                Err((sp, msg)) => {
+                    println!("inline failed for {:?}", fun_name);
+                    let not_inlined_exp =
+                        TracedExpX::new(exp.e.clone(), exp.trace.primary_label(&sp, msg));
+                    // stop inlining
+                    if negated {
+                        return Arc::new(vec![negate_atom(&not_inlined_exp)]);
+                    } else {
+                        return Arc::new(vec![not_inlined_exp]);
+                    }
+                }
+            }
         }
         ExpX::If(e1, e2, e3) if !negated => {
             let then_e = ExpX::Binary(BinaryOp::Implies, e1.clone(), e2.clone());
@@ -758,13 +817,13 @@ fn tr_split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
             let else_exp = SpannedTyped::new(&e3.span, &exp.e.typ, else_e);
 
             let es1 =
-                tr_split_expr(ctx, &TracedExpX::new(then_exp.clone(), exp.trace.clone()), negated);
+                split_expr(ctx, &TracedExpX::new(then_exp.clone(), exp.trace.clone()), negated);
             let es2 =
-                tr_split_expr(ctx, &TracedExpX::new(else_exp.clone(), exp.trace.clone()), negated);
+                split_expr(ctx, &TracedExpX::new(else_exp.clone(), exp.trace.clone()), negated);
             return merge_two_es(es1, es2);
         }
         ExpX::UnaryOpr(uop, e1) => {
-            let es1 = tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
+            let es1 = split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 let new_e = ExpX::UnaryOpr(uop.clone(), e.e.clone());
@@ -775,7 +834,7 @@ fn tr_split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
             return Arc::new(splitted);
         }
         ExpX::Bind(bnd, e1) => {
-            let es1 = tr_split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
+            let es1 = split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 // REVIEW: should I split expression in `let sth = exp`?
@@ -820,9 +879,9 @@ fn stm_call(
             && name.path.segments[1].to_string() == "assert".to_string()
         {
             let error = air::errors::error("splitted assertion failure", span);
-            let exprs =
-                tr_split_expr(ctx, &TracedExpX::new(args[0].0.clone(), error.clone()), false);
-            if exprs.len() > 1 {
+            let exprs = split_expr(ctx, &TracedExpX::new(args[0].0.clone(), error.clone()), false);
+            if exprs.len() > 0 {
+                // change this to conditional one
                 for small_exp in &*exprs {
                     let new_error = small_exp.trace.primary_span(&small_exp.e.span);
                     let additional_assert = StmX::Assert(Some(new_error), small_exp.e.clone());

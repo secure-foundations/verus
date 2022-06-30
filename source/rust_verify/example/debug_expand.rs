@@ -9,6 +9,8 @@ use pervasive::option::*;
 mod pervasive;
 #[allow(unused_imports)]
 use crate::pervasive::modes::*;
+#[allow(unused_imports)]
+use crate::pervasive::{*, seq::*, vec::*};
 
 #[verifier(external)]
 fn main() {
@@ -63,7 +65,6 @@ proof fn test_expansion_match() {
 }
 
 
-
 // example3: 2-level failure
 spec fn is_good_integer_2(z: int) -> bool 
 {
@@ -85,6 +86,7 @@ proof fn test_expansion() {
   assert(is_good_option(x));
 //^^^^^^ ^^^^^^^^^^^^^^^^^
 }
+
 
 // example4: 3-level failure
 #[derive(PartialEq, Eq)] 
@@ -136,6 +138,26 @@ proof fn test_expansion_negate()
   assert(is_good_integer(x));
 //^^^^^^ ^^^^^^^^^^^^^^^^^^
 }
+
+
+// example6: forall
+spec fn seq_bounded_by_length(s1: Seq<int>) -> bool {
+  (forall|i:int| (0 <= i && i < s1.len())  ==> (0 <= s1.index(i) && s1.index(i) < s1.len()))
+//                                                                  ^^^^^^^^^^^^^^^^^^^^^^
+}
+
+proof fn test_expansion_forall() 
+{
+  let mut ss = Seq::empty();
+  ss = ss.push(0);
+  ss = ss.push(10);
+  assert(seq_bounded_by_length(ss));
+//^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+
+
+
+
 
 
 
