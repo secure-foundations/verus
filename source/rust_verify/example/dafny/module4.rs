@@ -1,18 +1,16 @@
-
-use builtin_macros::*;
 use builtin::*;
+use builtin_macros::*;
 
 mod pervasive;
-use crate::pervasive::{*, vec::*, seq::*, modes::*};
+use crate::pervasive::{modes::*, seq::*, vec::*, *};
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 #[repr(u64)]
 pub enum Colour {
-    Red = 1, 
-    White = 2, 
-    Blue = 3
+    Red = 1,
+    White = 2,
+    Blue = 3,
 }
-
 
 verus! {
 
@@ -42,30 +40,46 @@ spec fn below(c: Colour, d: Colour) -> bool {
     c == red() || c == d || d == blue()
 }
 
-
-fn dutch_flag(a: Vec<Colour>)
+// Wait till verus is ready 
+/* fn dutch_flag(mut a: Vec<Colour>)
     ensures
         forall|i:int, j:int| 0 <= i < j < a.len() ==> below(a.index(i), a.index(j)),
 {
-    let r = 0;
-    let w = 0;
-    let b = a.len();
+    let mut r:usize = 0;
+    let mut w:usize  = 0;
+    let b:usize = a.len();
 
-    while w < b 
-        invariant 
-            0 <= r <= w <= b <= a.len(), 
-            forall|i:int| 0 <= i < r ==> convert(a.index(i)) == red(), 
-            forall|i:int| r <= i < w ==> convert(a.index(i)) == white(), 
+    while w < b
+        invariant
+            0 <= r <= w <= b <= a.len(),
+            forall|i:int| 0 <= i < r ==> convert(a.index(i)) == red(),
+            forall|i:int| r <= i < w ==> convert(a.index(i)) == white(),
             forall|i:int| b <= i < a.len() ==> convert(a.index(i)) == blue(),
     {
         match a.index(w) {
-            Colour::Red => { 
+            Colour::Red => {
+                let aw = *a.index(w);
+                let ar = *a.index(r);
+
+                a.set(r, aw);
+                a.set(w, ar);
+
+                r = r + 1;
+                w = w + 1;
             },
-            Colour::White => {}, 
-            Colour::Blue => {},
+            Colour::White => {
+                w  = w + 1;
+            },
+            Colour::Blue => {
+                let aw = *a.index(w);
+                let ab_1 = *a.index(b-1);
+
+                a.set(b-1, aw);
+                a.set(w, ab_1);
+            }
         };
     }
-}
+} */
 
 
 }
