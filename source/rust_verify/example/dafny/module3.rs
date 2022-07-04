@@ -37,13 +37,28 @@ verus! {
     i1
 } */
 
+proof fn mid_is_between(lo: nat, hi: nat)
+    requires
+        lo <= hi,
+    ensures
+        lo <= (lo + hi) / 2 && (lo + hi) / 2 <= hi,
+{
+    // let mid = (lo + hi) / 2;
+    // assert(lo <= hi);
+    // assert(lo + lo <= hi + lo); // by math
+    // assert(lo * 2 <= lo + hi);
+    // assert((lo * 2) / 2 <= (lo + hi) / 2);
+    // assert(lo <= mid); // by (nonlinear_arith);
+}
+
 fn binary_search(v: &Vec<i64>, k: i64) -> (r: isize) 
     requires 
         forall|i:int, j:int| 0 <= i < j < v.len() ==> v.index(i) <= v.index(j),
     ensures 
         0 <= r ==> (r as nat) < v.len() && v.index(r as nat) == k,
-        r < 0 ==> forall|i:int| 0 <= i < v.len() ==> v.index(r as nat) != k
+        r < 0 ==> forall|i:int| 0 <= i < v.len() ==> (#[trigger] v.index(i as nat)) != k
 {
+    assume(false);
     let mut lo = 0;
     let mut hi = v.len();
 
@@ -53,7 +68,15 @@ fn binary_search(v: &Vec<i64>, k: i64) -> (r: isize)
             forall|i:int| 0 <= i < lo ==> v.index(i) != k, 
             forall|i:int| hi <= i < v.len() ==> v.index(i) != k
     {
-        let mid = (lo + hi)/2;
+        let mid = (lo + hi) / 2;
+        proof {
+            assert(lo >= 0);
+            assert(hi >= 0);
+            mid_is_between(lo, hi);
+            assume(lo <= (lo + hi) / 2); // TODO incompleteness
+            assert(lo <= mid);
+            assert(mid <= hi);
+        }
         if k < *v.index(mid) {
             hi = mid;
         }else if *v.index(mid) < k {
@@ -61,6 +84,9 @@ fn binary_search(v: &Vec<i64>, k: i64) -> (r: isize)
         }else {
             return mid as isize;
         }
+        assert(0 <= lo);
+        assert(lo <= hi);
+        assert(hi <= v.len());
     }
 
     return -1;
