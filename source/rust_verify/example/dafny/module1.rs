@@ -79,17 +79,23 @@ fn triple_impl(n: i64) -> (result: i64)
 }
 
 
-fn sum_max(x: i64, y: i64) -> ((s,m):(i64,i64))
-    ensures 
-        s == x + y,
-        x <= m && y <= m,
-        m == x || m == y
+fn sum_max(x: i64, y: i64) -> (res: (i64,i64))
+    requires
+        // TODO(chris) undecipherable parsing error
+        // -0x7fff_ffff_ffff_ffff < x as int + y as int,
+        // x as int + y as int < 0x7fff_ffff_ffff_ffff,
+        (-0x7fff_ffff_ffff_ffff) < (x as int + y as int),
+        (x as int + y as int) < 0x7fff_ffff_ffff_ffff,
+    ensures
+        res.0 == x + y,
+        x <= res.1 && y <= res.1,
+        res.1 == x || res.1 == y
 {
     let s = x + y; 
     if x < y {
         let m = y;
         return (s,m);
-    }else {
+    } else {
         let m = x;
         return (s,m);
     }
