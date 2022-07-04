@@ -61,6 +61,18 @@ impl<V> Multiset<V> {
 
         unimplemented!();
     }
+
+    #[spec]
+    pub fn from_seq(input: crate::pervasive::seq::Seq<V>) -> Multiset<V>
+    {
+        decreases(input.len()); // TODO(utaal): when bug fixed, remove len
+        // show we CAN build a multiset constructively from a seq
+        if input.len()==0 {
+            Multiset::empty()
+        } else {
+            Self::from_seq(input.drop_last()).insert(input.last())
+        }
+    }
 }
 
 // Specification of `empty`

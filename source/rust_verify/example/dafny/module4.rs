@@ -3,8 +3,11 @@ use builtin_macros::*;
 
 mod pervasive;
 use crate::pervasive::{modes::*, seq::*, vec::*, *};
+use crate::pervasive::multiset::Multiset;
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+verus! {
+
+#[derive(Eq, PartialEq, Copy, Clone, Structural)]
 #[repr(u64)]
 pub enum Colour {
     Red = 1,
@@ -12,38 +15,14 @@ pub enum Colour {
     Blue = 3,
 }
 
-verus! {
-
-#[verifier(external_body)]
-spec fn red() -> u64 {
-    Colour::Red as u64
-}
-
-#[verifier(external_body)]
-spec fn white() -> u64 {
-    Colour::White as u64
-}
-
-#[verifier(external_body)]
-spec fn blue() -> u64 {
-    Colour::Blue as u64
-}
-
-#[verifier(external_body)]
-spec fn convert(c: Colour) -> u64 {
-    c as u64
-}
-
 spec fn below(c: Colour, d: Colour) -> bool {
-    let c: u64 = convert(c);
-    let d: u64 = convert(d);
-    c == red() || c == d || d == blue()
+    c == Colour::Red || c == d || d == Colour::Blue
 }
 
-// Wait till verus is ready 
-/* fn dutch_flag(mut a: Vec<Colour>)
+fn dutch_flag(a: &mut Vec<Colour>)
     ensures
         forall|i:int, j:int| 0 <= i < j < a.len() ==> below(a.index(i), a.index(j)),
+        Multiset::from_seq(a.view()) === Multiset::from_seq(old(a).view()),
 {
     let mut r:usize = 0;
     let mut w:usize  = 0;
@@ -52,9 +31,9 @@ spec fn below(c: Colour, d: Colour) -> bool {
     while w < b
         invariant
             0 <= r <= w <= b <= a.len(),
-            forall|i:int| 0 <= i < r ==> convert(a.index(i)) == red(),
-            forall|i:int| r <= i < w ==> convert(a.index(i)) == white(),
-            forall|i:int| b <= i < a.len() ==> convert(a.index(i)) == blue(),
+            forall|i:int| 0 <= i < r ==> a.index(i) == Colour::Red,
+            forall|i:int| r <= i < w ==> a.index(i) == Colour::White,
+            forall|i:int| b <= i < a.len() ==> a.index(i) == Colour::Blue,
     {
         match a.index(w) {
             Colour::Red => {
@@ -79,7 +58,7 @@ spec fn below(c: Colour, d: Colour) -> bool {
             }
         };
     }
-} */
+}
 
 
 }
