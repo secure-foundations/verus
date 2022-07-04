@@ -51,6 +51,10 @@ proof fn mid_is_between(lo: nat, hi: nat)
     // assert(lo <= mid); // by (nonlinear_arith);
 }
 
+spec fn foo(a: int, b: int) -> bool {
+    true
+}
+
 fn binary_search(v: &Vec<i64>, k: i64) -> (r: isize) 
     requires 
         forall|i:int, j:int| 0 <= i < j < v.len() ==> v.index(i) <= v.index(j),
@@ -58,13 +62,13 @@ fn binary_search(v: &Vec<i64>, k: i64) -> (r: isize)
         0 <= r ==> (r as nat) < v.len() && v.index(r as nat) == k,
         r < 0 ==> forall|i:int| 0 <= i < v.len() ==> (#[trigger] v.index(i as nat)) != k
 {
-    assume(false);
     let mut lo = 0;
     let mut hi = v.len();
 
     while lo < hi 
         invariant 
             0 <= lo <= hi <= v.len(),
+            forall|i:int, j:int| #![trigger foo(i, j)] 0 <= i < j < v.len() ==> v.index(i) <=  v.index(j),
             forall|i:int| 0 <= i < lo ==> v.index(i) != k, 
             forall|i:int| hi <= i < v.len() ==> v.index(i) != k
     {
@@ -74,19 +78,30 @@ fn binary_search(v: &Vec<i64>, k: i64) -> (r: isize)
             assert(hi >= 0);
             mid_is_between(lo, hi);
             assume(lo <= (lo + hi) / 2); // TODO incompleteness
-            assert(lo <= mid);
-            assert(mid <= hi);
         }
         if k < *v.index(mid) {
+            assert(forall|i:int| hi <= i < v.len() ==> v.index(i) != k);
+            assert(mid <= hi);
+            let prev_hi: Ghost<usize> = ghost(hi);
             hi = mid;
-        }else if *v.index(mid) < k {
+
+            assert forall|i:int| hi <= i < v.len() implies v.index(i) != k by {
+                if *prev_hi as int <= i {
+                    assert(v.index(i) != k);
+                } else {
+                    assert(k < v.index(hi));
+                    assert(foo(hi, i));
+                    assert(v.index(hi) <= v.index(i));
+                    assert(v.index(i) > k);
+                    assert(v.index(i) != k);
+                }
+            }
+        } else if *v.index(mid) < k {
             lo = mid + 1;
-        }else {
+            assume(forall|i:int| 0 <= i < lo ==> v.index(i) != k); 
+        } else {
             return mid as isize;
         }
-        assert(0 <= lo);
-        assert(lo <= hi);
-        assert(hi <= v.len());
     }
 
     return -1;
