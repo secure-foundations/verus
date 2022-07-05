@@ -10,7 +10,6 @@ use core::panic;
 use sise::Node;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::{option, result};
 
 /// Internal expression to evaulate model constant
 /// ModelExpr will be translated into `sise::Node`, and sent to Z3 for evaluation
@@ -144,13 +143,13 @@ impl Model {
         }
     }
 
-    fn string_to_bool(&self, result: String) -> bool {
+    fn string_to_bool(&self, result: String) -> Result<bool, String> {
         if result == "true" {
-            true
+            Ok(true)
         } else if result == "false" {
-            false
+            Ok(false)
         } else {
-            panic!("expected true or false, but got {:?}", result);
+            Err(format!("expected true or false, but got {:?}", result))
         }
     }
 
@@ -192,8 +191,8 @@ impl Model {
     }
 
     /// Generate a string to be used in the SMT file to box a given VIR type
-    fn box_func(&self, typ: &Typ) -> String {
-        match &**typ {
+    fn box_func(&self, typ: &Typ) -> Result<String, String> {
+        let boxing = match &**typ {
             TypX::Datatype(path, typs) => {
                 if typs.len() == 0 || path.segments[0].to_string() != "pervasive".to_string() {
                     prefix_box(path).to_string()
@@ -206,13 +205,14 @@ impl Model {
             }
             TypX::Bool => String::from(BOX_BOOL),
             TypX::Int(_range) => String::from(BOX_INT),
-            _ => panic!("TODO: box_func for typ {:?}", typ),
-        }
+            _ => return Err(format!("TODO: box_func for typ {:?}", typ)),
+        };
+        Ok(boxing)
     }
 
     /// Generate a string to be used in the SMT file to unbox a given VIR type
-    fn unbox_func(&self, typ: &Typ) -> String {
-        match &**typ {
+    fn unbox_func(&self, typ: &Typ) -> Result<String, String> {
+        let unboxing = match &**typ {
             TypX::Datatype(path, typs) => {
                 if typs.len() == 0 || path.segments[0].to_string() != "pervasive".to_string() {
                     prefix_unbox(path).to_string()
@@ -224,8 +224,9 @@ impl Model {
             }
             TypX::Bool => String::from(UNBOX_BOOL),
             TypX::Int(_range) => String::from(UNBOX_INT),
-            _ => panic!("TODO: unbox_func for typ {:?}", typ),
-        }
+            _ => return Err(format!("TODO: unbox_func for typ {:?}", typ)),
+        };
+        Ok(unboxing)
     }
 
     fn get_air_name(&self, name: &Ident, sid: Option<Ident>) -> Ident {
@@ -311,7 +312,7 @@ impl Model {
                         let appl = format!("is-{}/{}", ident.to_string(), variant.name.to_string());
                         let items = vec![Node::Atom(appl), self.model_expr_to_node(&expr)];
                         let result = context.eval_expr(Node::List(items))?;
-                        let res = self.string_to_bool(result);
+                        let res = self.string_to_bool(result)?;
                         if !res {
                             continue;
                         }
@@ -347,7 +348,7 @@ impl Model {
                                     // (eval (%I Poly!val!5))   -> error  unknown constant
                                     // (eval (%I (Option./Some/_0 a@)))
                                     // TODO: typs has multiple types for example, when a tuple has two different enums
-                                    let unbox = self.unbox_func(&typs[0]);
+                                    let unbox = self.unbox_func(&typs[0])?;
                                     let unboxed_expr = mk_apply(Arc::new(unbox), new_expr);
                                     self.build_model_constant(
                                         var.clone(),
@@ -379,17 +380,17 @@ impl Model {
                 }
             }
             TypX::Bool => {
-                let result = context.eval_expr(var_expr).unwrap();
-                let b = self.string_to_bool(result);
+                let result = context.eval_expr(var_expr)?;
+                let b = self.string_to_bool(result)?;
                 Arc::new(ModelConstantX::Bool(b))
             }
             TypX::Int(_range) => {
-                let result = context.eval_expr(var_expr).unwrap();
+                let result = context.eval_expr(var_expr)?;
                 Arc::new(ModelConstantX::Int(Arc::new(result)))
             }
             // For evaluation, simply unbox
             TypX::Boxed(typ_in) => {
-                let unbox = self.unbox_func(typ_in);
+                let unbox = self.unbox_func(typ_in)?;
                 let unboxed_expr = mk_apply(Arc::new(unbox), expr.clone());
                 self.build_model_constant(var.clone(), &unboxed_expr, typ_in, context)?
             }
@@ -430,7 +431,7 @@ impl Model {
         // (eval (pervasive.seq.Seq.len.? (UINT 32) (Poly%pervasive.seq.Seq<u32.>. v@)))
         // TODO: What if length does not return concrete int value?
         // sometimes got partially evaluated values.  e.g. `(pervasive.seq.Seq.len.? Type!val!2 Poly!val!2)`
-        let boxing_string = self.box_func(seq_typ);
+        let boxing_string = self.box_func(seq_typ)?;
         let boxed_seq_expr = mk_apply(Arc::new(boxing_string), expr.clone());
         let typ = &typs[0]; // the type of seq element
         let typ_expr = typ_to_id(typ);
@@ -444,8 +445,7 @@ impl Model {
         let length_string = match context.eval_expr(query_len_node) {
             Ok(len_string) => len_string,
             Err(err_string) => {
-                println!("Z3 returned non-integer length, consider adding additional assumes");
-                panic!("{}", &err_string);
+                return Err(format!("When evaluating seq/vec length, {}", err_string));
             }
         };
         // println!("seq len: {}", length_string);
@@ -476,7 +476,7 @@ impl Model {
         let query_index_appl = Arc::new("pervasive.seq.Seq.index.?".to_string());
         for idx in 0..seq_length {
             let idx_expr = Arc::new(ModelExprX::Const(Arc::new(idx.to_string())));
-            let index_expr = mk_apply(Arc::new(self.box_func(typ)), idx_expr);
+            let index_expr = mk_apply(Arc::new(self.box_func(typ)?), idx_expr);
             let elt_expr = Arc::new(ModelExprX::Apply(
                 Arc::new(query_index_appl.to_string()),
                 Arc::new(vec![
@@ -510,7 +510,7 @@ impl Model {
         // REVIEW: is this desirable?
         // Example:  (pervasive.vec.Vec.view.? (UINT 32) (Poly%pervasive.vec.Vec<u32.>.  v@))
         // Note that `.view()` returns `Poly`. Make typ as `boxed`
-        let boxing_string = self.box_func(vec_typ);
+        let boxing_string = self.box_func(vec_typ)?;
         let boxed_vec_expr = mk_apply(Arc::new(boxing_string), expr.clone());
 
         let typ = &typs[0]; // the type of vector element
@@ -532,7 +532,7 @@ impl Model {
         });
         let seq_typ = Arc::new(TypX::Datatype(seq_path, typs.clone()));
 
-        let unbox_string = self.unbox_func(&seq_typ);
+        let unbox_string = self.unbox_func(&seq_typ)?;
         let unboxed_view_expr = mk_apply(Arc::new(unbox_string), view_expr);
 
         // let boxed_seq_typ = Arc::new(TypX::Boxed(seq_typ));
@@ -592,7 +592,7 @@ impl Model {
 
     pub fn build(&mut self, context: &mut air::context::Context) {
         if self.model.len() > 0 {
-            panic! {"VIR model build precondition not satisfied"}
+            panic! {"Internal err: VIR model build precondition not satisfied"}
         }
 
         // gather datatype information for this counter example model -> self.datatypes

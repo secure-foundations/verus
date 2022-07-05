@@ -1,6 +1,4 @@
-use crate::ast::{
-    BinaryOp, Expr, Function, Idents, Params, SpannedTyped, Typ, TypX, Typs, UnaryOp,
-};
+use crate::ast::{BinaryOp, Expr, Function, Params, SpannedTyped, Typ, TypX, UnaryOp};
 use crate::ast_to_sst::{expr_to_pure_exp, get_function};
 use crate::context::Ctx;
 use crate::def::Spanned;
