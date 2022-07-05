@@ -194,5 +194,32 @@ proof fn test_7(x:int) {
 
 
 
+// example8: ensures
+spec fn is_good_integer_8(x: int) -> bool 
+{
+    x >= 0 && x != 5
+//            ^^^^^^  
+}
+
+spec fn is_good_message_8(msg:Message) -> bool {
+  match msg {
+      Message::Quit(b) => b,
+      Message::Move{x, y} => is_good_integer_8( (x as int)  - (y as int)),
+//                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Message::Write(b) => b,
+  }
+}
+
+proof fn test_ensures_failure() -> (good_msg: Message)
+  ensures
+    is_good_message(good_msg),
+//  ^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  Message::Move{x: 15, y: 10}
+}
+
+
+
+
 
 }

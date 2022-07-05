@@ -4,7 +4,7 @@ use crate::ast::{
 use crate::ast_to_sst::{expr_to_pure_exp, get_function};
 use crate::context::Ctx;
 use crate::def::Spanned;
-use crate::sst::{Bnd, BndX, Exp, ExpX, Exps};
+use crate::sst::{Bnd, BndX, Exp, ExpX, Exps, Stm, StmX};
 use air::ast::{Binder, BinderX, Span};
 use core::panic;
 use std::collections::HashMap;
@@ -318,4 +318,15 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
             return Arc::new(vec![exp.clone()]);
         }
     }
+}
+
+pub(crate) fn register_splitted_assertions(traced_exprs: TracedExps) -> Vec<Stm> {
+    // maybe check some condition here before registering every small exps
+    let mut stms: Vec<Stm> = Vec::new();
+    for small_exp in &*traced_exprs {
+        let new_error = small_exp.trace.primary_span(&small_exp.e.span);
+        let additional_assert = StmX::Assert(Some(new_error), small_exp.e.clone());
+        stms.push(Spanned::new(small_exp.e.span.clone(), additional_assert));
+    }
+    stms
 }

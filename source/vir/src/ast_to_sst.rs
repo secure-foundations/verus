@@ -555,15 +555,6 @@ fn is_small_exp_or_loc(exp: &Exp) -> bool {
     }
 }
 
-fn register_splitted_assertions(traced_exprs: TracedExps, stms: &mut Vec<Stm>) {
-    // maybe check some condition here before registering every small exps
-    for small_exp in &*traced_exprs {
-        let new_error = small_exp.trace.primary_span(&small_exp.e.span);
-        let additional_assert = StmX::Assert(Some(new_error), small_exp.e.clone());
-        stms.push(Spanned::new(small_exp.e.span.clone(), additional_assert));
-    }
-}
-
 fn stm_call(
     ctx: &Ctx,
     state: &mut State,
@@ -593,7 +584,7 @@ fn stm_call(
                 &crate::split_expression::TracedExpX::new(args[0].0.clone(), error.clone()),
                 false,
             );
-            register_splitted_assertions(exprs, &mut stms);
+            stms = crate::split_expression::register_splitted_assertions(exprs);
         } else {
             // we are spliting the `requires` expression on the call site.
             // If we split the `requires` expression on the function itself,
@@ -619,7 +610,7 @@ fn stm_call(
                     &crate::split_expression::TracedExpX::new(exp_subsituted, error.clone()),
                     false,
                 );
-                register_splitted_assertions(exprs, &mut stms);
+                stms = crate::split_expression::register_splitted_assertions(exprs);
             }
             // println!("my args");
             // for arg in  &**args {

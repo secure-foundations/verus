@@ -641,14 +641,31 @@ pub fn func_def_to_air(
             }
             let mut ens_stmts: Vec<Stm> = Vec::new();
             let mut enss: Vec<Exp> = Vec::new();
+            let mut small_ens_assertions = vec![];
             for e in req_ens_function.x.ensure.iter() {
                 if ctx.checking_recommends() {
                     ens_stmts.extend(crate::ast_to_sst::check_pure_expr(ctx, &mut state, e)?);
                 } else {
-                    // TODO: ensures error localization
-                    // right before the target expression, inssert the spliited expressions
-                    // if debug==true, error localization expansion, split certain expression
-                    enss.push(crate::ast_to_sst::expr_to_exp(ctx, &ens_pars, e)?);
+                    // TODO: split at only chosen expression
+                    if ctx.debug {
+                        let ens_exp = crate::ast_to_sst::expr_to_exp(ctx, &ens_pars, e)?;
+                        let error = air::errors::error("splitted ensures failure", &ens_exp.span);
+                        let splitted_exprs = crate::split_expression::split_expr(
+                            ctx,
+                            &crate::split_expression::TracedExpX::new(
+                                ens_exp.clone(),
+                                error.clone(),
+                            ),
+                            false,
+                        );
+                        small_ens_assertions.extend(
+                            crate::split_expression::register_splitted_assertions(splitted_exprs),
+                        );
+                        println!("{:?}", small_ens_assertions.len());
+                        enss.push(ens_exp);
+                    } else {
+                        enss.push(crate::ast_to_sst::expr_to_exp(ctx, &ens_pars, e)?);
+                    }
                 }
             }
             let enss = Arc::new(enss);
@@ -669,10 +686,22 @@ pub fn func_def_to_air(
                 }
                 req_stms.push(stm);
                 if !skip_ensures {
+                    // if ctx.debug {
+                    //     req_stms.extend(small_ens_assertions);
+                    // }
                     req_stms.extend(ens_stmts);
                 }
                 stm = crate::ast_to_sst::stms_to_one_stm(&body.span, req_stms);
             }
+
+            let stm = if ctx.debug {
+                let mut my_stms = vec![stm.clone()];
+                my_stms.extend(small_ens_assertions);
+                crate::ast_to_sst::stms_to_one_stm(&stm.span, my_stms)
+            } else {
+                stm
+            };
+
             let stm = state.finalize_stm(&stm);
             state.ret_post = None;
 
