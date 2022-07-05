@@ -1,13 +1,13 @@
 use crate::ast::{
-    ArithOp, BinaryOp, Function, SpannedTyped, Stmt, StmtX, Typ, TypX, Typs, UnaryOp,
+    BinaryOp, Expr, Function, Idents, Params, SpannedTyped, Typ, TypX, Typs, UnaryOp,
 };
 use crate::ast_to_sst::{expr_to_pure_exp, get_function};
 use crate::context::Ctx;
 use crate::def::Spanned;
-use crate::sst::{Bnd, BndX, Dest, Exp, ExpX, Exps};
-use air::ast::{Binder, BinderX, Binders, Span};
+use crate::sst::{Bnd, BndX, Exp, ExpX, Exps};
+use air::ast::{Binder, BinderX, Span};
 use core::panic;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 fn subsitute_argument(
@@ -99,10 +99,51 @@ fn subsitute_argument(
             // CallLambda(Typ, Exp, Exps),
             // Ctor(Path, Ident, Binders<Exp>),
             // WithTriggers(Trigs, Exp),
-            return Err((exp.span.clone(), format!("TODO: unsubsituted exp,subsitute_argument ")));
+            return Err((exp.span.clone(), format!("TODO: unsubsituted exp, subsitute_argument ")));
         }
     };
     Ok(result)
+}
+
+// e1: param, e2: exp_to_replace
+fn assert_same_type(param_typ: &Typ, e2: &Exp) -> Result<(), (Span, String)> {
+    match (&**param_typ, &*e2.typ) {
+        (TypX::Bool, TypX::Bool) |
+        (TypX::Int(_),TypX::Int(_)) |
+        (TypX::Tuple(_), TypX::Tuple(_)) |
+        (TypX::Lambda(_, _), TypX::Lambda(_,_)) |
+        (TypX::Datatype(_, _), TypX::Datatype(_,_)) |
+        // TODO: recursive check instead
+        (TypX::Boxed(_), TypX::Boxed(_)) |
+        (TypX::TypParam(_), TypX::TypParam(_)) |
+        (TypX::TypeId, TypX::TypeId) |
+        (TypX::Air(_), TypX::Air(_)) => Ok(()),
+        _ => return Err((e2.span.clone(), "TODO or interal error: arg type mismatch during function inlining".to_string())),
+    }
+}
+pub(crate) fn tr_inline_expression(
+    body_exp: &Exp,
+    params: &Params,
+    exps: &Exps,
+) -> Result<Exp, (Span, String)> {
+    let mut arg_map: HashMap<Arc<String>, Exp> = HashMap::new();
+    let mut count = 0;
+    for param in &**params {
+        let exp_to_insert = &exps[count];
+        assert_same_type(&param.x.typ, exp_to_insert)?;
+        arg_map.insert(param.x.name.clone(), exp_to_insert.clone());
+        count = count + 1;
+    }
+    return subsitute_argument(body_exp, &arg_map);
+}
+
+pub(crate) fn pure_ast_expression_to_sst(ctx: &Ctx, body: &Expr, params: &Params) -> Exp {
+    let pars = crate::func_to_air::params_to_pars(params, false);
+    let mut state = crate::ast_to_sst::State::new();
+    state.declare_params(&pars);
+    state.view_as_spec = true;
+    let body_exp = expr_to_pure_exp(&ctx, &mut state, &body).expect("pure_ast_expression_to_sst");
+    state.finalize_exp(&body_exp)
 }
 
 // simply inline, the caller of `inline` should call `split_expr` with the inlined expr.
@@ -114,44 +155,8 @@ fn tr_inline_function(ctx: &Ctx, fun: Function, exps: &Exps) -> Result<Exp, (Spa
 
     let body = fun.x.body.as_ref().unwrap();
     let params = &fun.x.params;
-    let pars = crate::func_to_air::params_to_pars(params, false);
-
-    let mut state = crate::ast_to_sst::State::new();
-    state.declare_params(&pars);
-    state.view_as_spec = true;
-    let body_exp = expr_to_pure_exp(&ctx, &mut state, &body).expect("tr_inlnie_function");
-    let body_exp = state.finalize_exp(&body_exp);
-
-    let mut arg_map: HashMap<Arc<String>, Exp> = HashMap::new();
-    let mut count = 0;
-    for param in &**params {
-        let exp_to_insert = &exps[count];
-
-        // println!("{:?}", param.x.name);
-        // println!("{:?}", exp_to_insert.x);
-        // println!("{:?}, {:?}", &*param.x.typ, &*exp_to_insert.typ);
-        match (&*param.x.typ, &*exp_to_insert.typ) {
-            (TypX::Bool, TypX::Bool) |
-            (TypX::Int(_),TypX::Int(_)) |
-            (TypX::Tuple(_), TypX::Tuple(_)) |
-            (TypX::Tuple(_), TypX::Tuple(_)) |
-            (TypX::Lambda(_, _), TypX::Lambda(_,_)) |
-            (TypX::Datatype(_, _), TypX::Datatype(_,_)) |
-            // TODO: recursive check instead
-            (TypX::Boxed(_), TypX::Boxed(_)) |
-            (TypX::TypParam(_), TypX::TypParam(_)) |
-            (TypX::TypeId, TypX::TypeId) |
-            (TypX::Air(_), TypX::Air(_)) => (),
-            _ => return Err((exp_to_insert.span.clone(), "TODO: arg type mismatch during function inlining".to_string())),
-        }
-        arg_map.insert(param.x.name.clone(), exp_to_insert.clone());
-        count = count + 1;
-    }
-    // for (k,v) in &arg_map {
-    //     println!("{:?} , {:?}", k , v);
-    // }
-    // // println!("subsitute {:?} args", arg_map.len());
-    return subsitute_argument(&body_exp, &arg_map);
+    let body_exp = pure_ast_expression_to_sst(ctx, body, params);
+    return tr_inline_expression(&body_exp, params, exps);
 }
 
 // trace
@@ -256,7 +261,7 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
                     println!("inline failed for {:?}", fun_name);
                     let not_inlined_exp =
                         TracedExpX::new(exp.e.clone(), exp.trace.primary_label(&sp, msg));
-                    // stop inlining
+                    // stop inlining. treat as atom
                     if negated {
                         return Arc::new(vec![negate_atom(&not_inlined_exp)]);
                     } else {
@@ -306,10 +311,10 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
 
         // TODO: more cases
 
-        // cases that cannot be splitted - "atom" boolean expressions
+        // cases that cannot be splitted. "atom" boolean expressions
         _ if negated => return Arc::new(vec![negate_atom(exp)]),
         _ => {
-            println!("unsplitted: {:?}", exp.e.x);
+            // println!("unsplitted: {:?}", exp.e.x);
             return Arc::new(vec![exp.clone()]);
         }
     }

@@ -645,6 +645,9 @@ pub fn func_def_to_air(
                 if ctx.checking_recommends() {
                     ens_stmts.extend(crate::ast_to_sst::check_pure_expr(ctx, &mut state, e)?);
                 } else {
+                    // TODO: ensures error localization
+                    // right before the target expression, inssert the spliited expressions
+                    // if debug==true, error localization expansion, split certain expression
                     enss.push(crate::ast_to_sst::expr_to_exp(ctx, &ens_pars, e)?);
                 }
             }

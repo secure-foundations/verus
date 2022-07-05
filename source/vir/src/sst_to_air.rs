@@ -991,6 +991,8 @@ fn stm_to_stmts(ctx: &Ctx, state: &mut State, stm: &Stm) -> Vec<Stmt> {
                     req_args.push(exp_to_expr(ctx, arg, expr_ctxt));
                 }
                 let e_req = Arc::new(ExprX::Apply(f_req, Arc::new(req_args)));
+                // println!("requires? {:?}", e_req);
+
                 let description = match (ctx.checking_recommends(), &func.x.attrs.custom_req_err) {
                     (true, None) => "recommendation not met".to_string(),
                     (_, None) => "precondition not satisfied".to_string(),

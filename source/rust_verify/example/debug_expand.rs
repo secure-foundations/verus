@@ -158,6 +158,40 @@ proof fn test_expansion_forall()
 
 
 
+// example7: requires
+spec fn is_good_integer_7(x: int) -> bool 
+{
+    x >= 0 && x != 5
+//  ^^^^^^  
+}
+
+spec fn is_good_message_7(msg:Message) -> bool {
+  match msg {
+      Message::Quit(b) => b,
+      Message::Move{x, y} => is_good_integer_7( (x as int)  - (y as int)),
+//                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Message::Write(b) => b,
+  }
+}
+
+proof fn test_require_failure(m:Message, b: bool) -> (good_int: int)
+requires 
+  b,
+  is_good_message_7(m),
+//^^^^^^^^^^^^^^^^^^^^
+ensures
+  is_good_integer_7(good_int),
+{
+  return 0;
+}
+
+proof fn test_7(x:int) {
+  let x = Message::Move{x: 0, y: 5};
+  test_require_failure(x, true);
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  assert(false);
+}
+
 
 
 

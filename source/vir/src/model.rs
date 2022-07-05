@@ -129,7 +129,7 @@ impl Model {
                 continue;
             }
             is_mutable.insert(name.clone(), decl.mutable);
-            println!("decl: {:?}", decl);
+            // println!("decl: {:?}", decl);
             types.insert(name.clone(), decl.typ.clone());
             local_vars.insert(name.clone());
         }
@@ -310,7 +310,7 @@ impl Model {
                         //  pervasive.option.Option./Some/_0
                         let appl = format!("is-{}/{}", ident.to_string(), variant.name.to_string());
                         let items = vec![Node::Atom(appl), self.model_expr_to_node(&expr)];
-                        let result = context.eval_expr(Node::List(items)).unwrap();
+                        let result = context.eval_expr(Node::List(items))?;
                         let res = self.string_to_bool(result);
                         if !res {
                             continue;

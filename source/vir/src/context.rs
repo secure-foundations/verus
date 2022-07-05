@@ -56,7 +56,8 @@ pub struct Ctx {
     pub(crate) funcs_with_ensure_predicate: HashSet<Fun>,
     pub(crate) datatype_map: HashMap<Path, Datatype>,
     pub(crate) trait_map: HashMap<Path, Trait>,
-    pub(crate) debug: bool,
+    pub(crate) debug: bool, // debugger here?
+    // pub(crate) debug_expand_target: Span,
     pub fun: Option<FunctionCtx>,
     pub global: GlobalCtx,
 }

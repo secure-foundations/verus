@@ -196,3 +196,47 @@ fn test_mutable_enum() -> u32 {
 //     assert(false);
 //     0   
 // }
+
+
+// Failing example:
+// TODO: renaming local variable into something like `x$1@`.  
+// #[derive(PartialEq, Eq)] 
+// pub enum Message {
+//     Quit(bool),
+//     Move { x: i32, y: i32 },
+//     Write(bool),
+// }
+
+// spec fn is_good_message(msg:Message) -> bool {
+//     match msg {
+//         Message::Quit(b) => b,
+//         Message::Move{x, y} => is_good_integer( (x as int)  - (y as int)),
+// //                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//         Message::Write(b) => b,
+//     }
+// }
+
+// // // example: requires
+// spec fn is_good_integer(x: int) -> bool 
+// {
+//   x >= 0 && x != 5
+// }
+
+// proof fn test_require_failure(m:Message) -> (good_int: int)
+//   requires 
+//     is_good_message(m),
+//   ensures
+//     is_good_integer(good_int),
+// {
+//     match m {
+//         Message::Quit(b) => return 0,
+//         Message::Move{x, y} => return ((x as int)  - (y as int)),
+//         Message::Write(b) => return 0,
+//     }
+// }
+
+// proof fn test_10(x:int) {
+//   let x = Message::Move{x: 0, y: 5};
+//   test_require_failure(x);
+//   assert(false);
+// }

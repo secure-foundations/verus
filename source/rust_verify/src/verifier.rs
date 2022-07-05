@@ -837,6 +837,20 @@ impl Verifier {
         }
 
         self.verify_module(compiler, &poly_krate, &mut air_context, &mut ctx)?;
+
+        // if self.args.debug && !encountered_vir_error {
+        // self.debug_module()
+
+        //     let mut numbering = 1;
+        //     for errs in &self.errors {
+        //         for err in errs {
+        //             println!("{:?}: {:?}", numbering, err);
+        //             numbering = numbering + 1;
+        //         }
+        //     }
+        //
+        // }
+
         global_ctx = ctx.free();
 
         let (time_smt_init, time_smt_run) = air_context.get_time();

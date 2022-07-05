@@ -5,6 +5,7 @@ use crate::ast::{
 use crate::ast_util::{err_str, err_string, types_equal, QUANT_FORALL};
 use crate::context::Ctx;
 use crate::def::Spanned;
+use crate::split_expression::TracedExps;
 use crate::sst::{
     Bnd, BndX, Dest, Exp, ExpX, Exps, LocalDecl, LocalDeclX, ParPurpose, Pars, Stm, StmX,
     UniqueIdent,
@@ -554,6 +555,15 @@ fn is_small_exp_or_loc(exp: &Exp) -> bool {
     }
 }
 
+fn register_splitted_assertions(traced_exprs: TracedExps, stms: &mut Vec<Stm>) {
+    // maybe check some condition here before registering every small exps
+    for small_exp in &*traced_exprs {
+        let new_error = small_exp.trace.primary_span(&small_exp.e.span);
+        let additional_assert = StmX::Assert(Some(new_error), small_exp.e.clone());
+        stms.push(Spanned::new(small_exp.e.span.clone(), additional_assert));
+    }
+}
+
 fn stm_call(
     ctx: &Ctx,
     state: &mut State,
@@ -570,8 +580,10 @@ fn stm_call(
     // take the boolean argument, and split this expressino into pieces.
     // then push all these as extra assertions
     // return as previously
+    // println!("stm call from, {:?}", name.path.segments);
     if ctx.debug {
         // TODO: grap the failing assertion's span, and only split for that assertion
+        // TODO: grap the span of failing `requires`  **on the call site** ,and split only that requires clause.
         if name.path.segments[0].to_string() == "pervasive".to_string()
             && name.path.segments[1].to_string() == "assert".to_string()
         {
@@ -581,15 +593,40 @@ fn stm_call(
                 &crate::split_expression::TracedExpX::new(args[0].0.clone(), error.clone()),
                 false,
             );
-            if exprs.len() > 0 {
-                // change this to conditional one
-                for small_exp in &*exprs {
-                    let new_error = small_exp.trace.primary_span(&small_exp.e.span);
-                    let additional_assert = StmX::Assert(Some(new_error), small_exp.e.clone());
-                    stms.push(Spanned::new(small_exp.e.span.clone(), additional_assert));
-                }
+            register_splitted_assertions(exprs, &mut stms);
+        } else {
+            // we are spliting the `requires` expression on the call site.
+            // If we split the `requires` expression on the function itself,
+            // this splitted encoding will take effect on every call site, which is not desirable.
+
+            // TODO: only split the requires according to the user-chosen error span.
+            // For now, split requires if there's any
+
+            let params = &fun.x.params;
+            // println!("requires of {:?}:", fun.x.name);
+            for e in &**fun.x.require {
+                // println!("         {:?}" , e);
+                let exp = crate::split_expression::pure_ast_expression_to_sst(ctx, e, params);
+                let arg_exps = Arc::new(vec_map(&args, |x| x.0.clone()));
+                let exp_subsituted =
+                    match crate::split_expression::tr_inline_expression(&exp, params, &arg_exps) {
+                        Ok(e) => e,
+                        Err(..) => panic!("remove this panic: failed requires substitution"),
+                    };
+                let error = air::errors::error("splitted requires failure", span);
+                let exprs = crate::split_expression::split_expr(
+                    ctx,
+                    &crate::split_expression::TracedExpX::new(exp_subsituted, error.clone()),
+                    false,
+                );
+                register_splitted_assertions(exprs, &mut stms);
             }
-        };
+            // println!("my args");
+            // for arg in  &**args {
+            //     println!("         {:?}" , arg);
+
+            // }
+        }
     }
 
     let mut small_args: Vec<Exp> = Vec::new();

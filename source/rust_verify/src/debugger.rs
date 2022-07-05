@@ -2,8 +2,6 @@ use crate::util::from_raw_span;
 use air::ast::Ident;
 use air::ast::Span as ASpan;
 use air::model::Model as AModel;
-use vir::model::Model as VModel;
-// use vir::model::Model as VModel;
 use rustc_span::source_map::SourceMap;
 use rustc_span::Span;
 use std::collections::HashMap;
@@ -12,6 +10,7 @@ use std::fmt;
 use std::sync::Arc;
 use vir::ast::Datatypes;
 use vir::def::{SnapPos, SpanKind};
+use vir::model::Model as VModel;
 use vir::model::ModelDefX as VModelDefX;
 
 #[derive(Debug)]
@@ -26,12 +25,6 @@ pub struct Debugger {
     // the current line number
     line: usize,
 }
-
-// fn choose_later_snapshot(sid1: Ident, sid2: Ident) -> Ident {
-//     let s1 = sid1.to_string().as_bytes()[0];
-//     let s2 = sid2.to_string().as_bytes()[0];
-//     if s1 < s2 { sid2 } else { sid1 }
-// }
 
 // TODO: set up trace-base testing for debugger (regression test & CI purporse)
 
