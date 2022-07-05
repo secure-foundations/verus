@@ -210,12 +210,15 @@ spec fn is_good_message_8(msg:Message) -> bool {
   }
 }
 
-proof fn test_ensures_failure() -> (good_msg: Message)
+
+proof fn test_ensures_failure(b: bool) -> (good_msg: Message)
   ensures
-    is_good_message(good_msg),
-//  ^^^^^^^^^^^^^^^^^^^^^^^^^
+  is_good_message_8(good_msg),
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^
 {
-  Message::Move{x: 15, y: 10}
+  let mut ret =  Message::Write(true);
+  if !b {ret = Message::Move{x: 10, y: 5};}
+  ret
 }
 
 
