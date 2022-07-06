@@ -328,3 +328,31 @@ pub(crate) fn register_splitted_assertions(traced_exprs: TracedExps) -> Vec<Stm>
     }
     stms
 }
+
+pub(crate) fn need_split_expression(ctx: &Ctx, span: &Span) -> bool {
+    for err in &*ctx.debug_expand_targets {
+        // println!("error msg: {:?}", err.msg);
+        // TODO: make this message in a def.rs somewhere
+        if err.msg == "postcondition not satisfied".to_string() {
+            for label in &err.labels {
+                // println!("label msg {:?}", label.msg);
+                // println!("label span {:?}", label.span);
+                if label.msg == "failed this postcondition".to_string() {
+                    if label.span.as_string == span.as_string {
+                        return true;
+                    }
+                }
+            }
+        } else {
+            for sp in &err.spans {
+                // println!("error span: {:?}", sp);
+                // TODO: is this string matching desirable??
+                if sp.as_string == span.as_string {
+                    return true;
+                }
+            }
+        }
+    }
+    // println!("query span: {:?}", span);
+    false
+}

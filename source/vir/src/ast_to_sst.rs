@@ -5,7 +5,6 @@ use crate::ast::{
 use crate::ast_util::{err_str, err_string, types_equal, QUANT_FORALL};
 use crate::context::Ctx;
 use crate::def::Spanned;
-use crate::split_expression::TracedExps;
 use crate::sst::{
     Bnd, BndX, Dest, Exp, ExpX, Exps, LocalDecl, LocalDeclX, ParPurpose, Pars, Stm, StmX,
     UniqueIdent,
@@ -572,7 +571,7 @@ fn stm_call(
     // then push all these as extra assertions
     // return as previously
     // println!("stm call from, {:?}", name.path.segments);
-    if ctx.debug {
+    if ctx.debug && crate::split_expression::need_split_expression(ctx, span) {
         // TODO: grap the failing assertion's span, and only split for that assertion
         // TODO: grap the span of failing `requires`  **on the call site** ,and split only that requires clause.
         if name.path.segments[0].to_string() == "pervasive".to_string()

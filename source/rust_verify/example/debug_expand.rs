@@ -135,7 +135,7 @@ spec fn is_good_integer_5(x: int) -> bool
 proof fn test_expansion_negate() 
 {
   let x = 5;
-  assert(is_good_integer(x));
+  assert(is_good_integer_5(x));
 //^^^^^^ ^^^^^^^^^^^^^^^^^^
 }
 

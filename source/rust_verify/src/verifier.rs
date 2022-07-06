@@ -52,6 +52,9 @@ pub struct Verifier {
     vir_crate: Option<Krate>,
     air_no_span: Option<air::ast::Span>,
     inferred_modes: Option<HashMap<InferMode, Mode>>,
+
+    // debugging purposes
+    expand_targets: Vec<air::errors::Error>,
 }
 
 #[derive(Debug)]
@@ -172,6 +175,8 @@ impl Verifier {
             vir_crate: None,
             air_no_span: None,
             inferred_modes: None,
+
+            expand_targets: vec![],
         }
     }
 
@@ -324,6 +329,7 @@ impl Verifier {
                         self.errors.push(errors);
 
                         if self.args.debug {
+                            self.expand_targets.push(error.clone());
                             let mut debugger = Debugger::new(
                                 air_model,
                                 assign_map,
@@ -836,20 +842,19 @@ impl Verifier {
             vir::printer::write_krate(&mut file, &poly_krate);
         }
 
+        let before_err_count = self.count_errors;
         self.verify_module(compiler, &poly_krate, &mut air_context, &mut ctx)?;
 
-        // if self.args.debug && !encountered_vir_error {
-        // self.debug_module()
-
-        //     let mut numbering = 1;
-        //     for errs in &self.errors {
-        //         for err in errs {
-        //             println!("{:?}: {:?}", numbering, err);
-        //             numbering = numbering + 1;
-        //         }
-        //     }
-        //
-        // }
+        // In the presence of error, re-verify this module with "splitted expressions" of failing assertions/requires/ensures
+        // to get more precise error message.
+        if self.args.debug && !self.encountered_vir_error && before_err_count < self.count_errors {
+            // TODO: log in a different file?
+            let mut air_context = self.new_air_context_with_prelude(module, None, false)?;
+            ctx.debug_expand_targets = self.expand_targets.to_vec(); // TODO: avoid copying
+            self.expand_targets = vec![]; // flush old errors
+            self.verify_module(compiler, &poly_krate, &mut air_context, &mut ctx)?;
+            self.expand_targets = vec![]; // flush errors from this second run
+        }
 
         global_ctx = ctx.free();
 

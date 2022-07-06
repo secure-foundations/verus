@@ -57,7 +57,7 @@ pub struct Ctx {
     pub(crate) datatype_map: HashMap<Path, Datatype>,
     pub(crate) trait_map: HashMap<Path, Trait>,
     pub(crate) debug: bool, // debugger here?
-    // pub(crate) debug_expand_target: Span,
+    pub debug_expand_targets: Vec<air::errors::Error>,
     pub fun: Option<FunctionCtx>,
     pub global: GlobalCtx,
 }
@@ -247,6 +247,7 @@ impl Ctx {
             datatype_map,
             trait_map,
             debug,
+            debug_expand_targets: vec![],
             fun: None,
             global,
         })

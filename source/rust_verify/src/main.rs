@@ -89,17 +89,6 @@ pub fn main() {
             }
         }
         Err(_) => {
-            // if !verifier.encountered_vir_error {
-            //     println!("debugger here?");
-            //     // hand over 'verifier' to debugger
-            //     let mut numbering = 1;
-            //     for errs in verifier.errors {
-            //         for err in errs {
-            //             println!("{:?}: {:?}", numbering, err);
-            //             numbering = numbering + 1;
-            //         }
-            //     }
-            // }
             std::process::exit(1);
         }
     }
