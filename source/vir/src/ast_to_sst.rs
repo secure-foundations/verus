@@ -566,17 +566,12 @@ fn stm_call(
     let fun = get_function(ctx, span, &name)?;
     let mut stms: Vec<Stm> = Vec::new();
 
-    // if name == pervasive assert,
-    // take the boolean argument, and split this expressino into pieces.
-    // then push all these as extra assertions
-    // return as previously
-    // println!("stm call from, {:?}", name.path.segments);
     if ctx.debug && crate::split_expression::need_split_expression(ctx, span) {
-        // TODO: grap the failing assertion's span, and only split for that assertion
-        // TODO: grap the span of failing `requires`  **on the call site** ,and split only that requires clause.
         if name.path.segments[0].to_string() == "pervasive".to_string()
             && name.path.segments[1].to_string() == "assert".to_string()
         {
+            // take the boolean argument, and split this expressino into pieces.
+            // then push all these as extra assertions
             let error = air::errors::error("splitted assertion failure", span);
             let exprs = crate::split_expression::split_expr(
                 ctx,
@@ -588,14 +583,8 @@ fn stm_call(
             // we are spliting the `requires` expression on the call site.
             // If we split the `requires` expression on the function itself,
             // this splitted encoding will take effect on every call site, which is not desirable.
-
-            // TODO: only split the requires according to the user-chosen error span.
-            // For now, split requires if there's any
-
             let params = &fun.x.params;
-            // println!("requires of {:?}:", fun.x.name);
             for e in &**fun.x.require {
-                // println!("         {:?}" , e);
                 let exp = crate::split_expression::pure_ast_expression_to_sst(ctx, e, params);
                 let arg_exps = Arc::new(vec_map(&args, |x| x.0.clone()));
                 let exp_subsituted =
@@ -611,11 +600,6 @@ fn stm_call(
                 );
                 stms = crate::split_expression::register_splitted_assertions(exprs);
             }
-            // println!("my args");
-            // for arg in  &**args {
-            //     println!("         {:?}" , arg);
-
-            // }
         }
     }
 

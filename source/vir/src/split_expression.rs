@@ -146,11 +146,10 @@ pub(crate) fn pure_ast_expression_to_sst(ctx: &Ctx, body: &Expr, params: &Params
 
 // simply inline, the caller of `inline` should call `split_expr` with the inlined expr.
 fn tr_inline_function(ctx: &Ctx, fun: Function, exps: &Exps) -> Result<Exp, (Span, String)> {
-    // TODO: check the visibility of the function
-    //       when the function is not visible, remind the user that it is not visible
-    // then return Err
-    // let visibile = fun.x.attrs.hidden;    // `fun` here should be the holder of the failing assertion
-
+    // TODO: is checking fuel enough?
+    if fun.x.fuel == 0 {
+        return Err((fun.span.clone(), "cannot inline opaque function".to_string()));
+    }
     let body = fun.x.body.as_ref().unwrap();
     let params = &fun.x.params;
     let body_exp = pure_ast_expression_to_sst(ctx, body, params);
