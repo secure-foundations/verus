@@ -147,23 +147,42 @@ pub(crate) fn pure_ast_expression_to_sst(ctx: &Ctx, body: &Expr, params: &Params
 fn tr_inline_function(
     ctx: &Ctx,
     state: &State,
-    fun: Function,
+    fun_to_inline: Function,
     exps: &Exps,
+    span: &Span,
 ) -> Result<Exp, (Span, String)> {
     // TODO: "hide" - check "FunctionAttrsX.hidden" of the function that owns this inlining thing.
     // TODO: `publish`, `visibility`
 
-    let fuel = match state.find_fuel(&fun.x.name) {
-        Some(fuel) => fuel, // prefer local_fuel on fun.x.fuel
-        None => fun.x.fuel,
+    let mut found_local_fuel = false;
+    let fuel = match state.find_fuel(&fun_to_inline.x.name) {
+        Some(fuel) => {
+            found_local_fuel = true;
+            fuel
+        } // prefer local_fuel on fun.x.fuel, this track `reveal` statement
+        None => fun_to_inline.x.fuel,
     };
 
-    if fuel == 0 {
-        return Err((fun.span.clone(), "Note: this function is opaque".to_string()));
+    let mut hidden = false; // track `hide` statement
+    match &state.fun {
+        Some(f) => {
+            let fun_owner = get_function(ctx, span, f).unwrap();
+            let fs_to_hide = &fun_owner.x.attrs.hidden;
+            for f_to_hide in &**fs_to_hide {
+                if **f_to_hide == *fun_to_inline.x.name {
+                    hidden = true;
+                };
+            }
+        }
+        None => (), // should I panic instead?
+    };
+
+    if fuel == 0 || (!found_local_fuel && hidden) {
+        return Err((fun_to_inline.span.clone(), "Note: this function is opaque".to_string()));
     } else {
         // TODO: recursive function inline. -- maybe just don't inline?
-        let body = fun.x.body.as_ref().unwrap();
-        let params = &fun.x.params;
+        let body = fun_to_inline.x.body.as_ref().unwrap();
+        let params = &fun_to_inline.x.params;
         let body_exp = pure_ast_expression_to_sst(ctx, body, params);
         return tr_inline_expression(&body_exp, params, exps);
     }
@@ -277,7 +296,7 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
         }
         ExpX::Call(fun_name, typs, exps) => {
             let fun = get_function(ctx, &exp.e.span, fun_name).unwrap();
-            let res_inlined_exp = tr_inline_function(ctx, state, fun, exps);
+            let res_inlined_exp = tr_inline_function(ctx, state, fun, exps, &exp.e.span);
             match res_inlined_exp {
                 Ok(inlined_exp) => {
                     // println!("inlined exp: {:?}", inlined_exp);
@@ -390,7 +409,7 @@ pub(crate) fn need_split_expression(ctx: &Ctx, span: &Span) -> bool {
             }
         } else {
             for sp in &err.spans {
-                println!("error span: {:?}", sp);
+                // println!("error span: {:?}", sp);
                 // TODO: is this string matching desirable??
                 if sp.as_string == span.as_string {
                     return true;
@@ -398,6 +417,6 @@ pub(crate) fn need_split_expression(ctx: &Ctx, span: &Span) -> bool {
             }
         }
     }
-    println!("chose not to split. query span: {:?}", span);
+    // println!("chose not to split. query span: {:?}", span);
     false
 }

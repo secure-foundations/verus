@@ -45,6 +45,8 @@ pub(crate) struct State {
     disable_recommends: u64,
     // For debug purpose, track the status of fuel for each function. Since `reveal` statement can change the fuel locally.
     reveal_map: Vec<HashMap<Fun, u32>>, //  HashMap<Fun, fuel>
+    // For debug purporse, track the function that is being translated
+    pub(crate) fun: Option<Fun>,
 }
 
 #[derive(Clone)]
@@ -106,6 +108,7 @@ impl State {
             ret_post: None,
             disable_recommends: 0,
             reveal_map,
+            fun: None,
         }
     }
 

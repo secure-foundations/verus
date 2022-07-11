@@ -611,6 +611,7 @@ pub fn func_def_to_air(
             };
 
             let mut state = crate::ast_to_sst::State::new();
+            state.fun = Some(function.x.name.clone());
             let mut ens_params = (*function.x.params).clone();
             let dest = if function.x.has_return() {
                 let ParamX { name, typ, .. } = &function.x.ret.x;

@@ -271,6 +271,21 @@ proof fn test_reveal(b: bool) {
     }
 }
 
+// example11: `hide`
+spec fn is_good_integer_11(x: int) -> bool 
+//   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Note: this function is opaque
+{
+  x >= 0 && x != 5
+}
+
+proof fn test_hide(b: bool) 
+{
+   hide(is_good_integer);
+   let i = 0;
+   assert(is_good_integer(i));
+// ^^^^^^ ^^^^^^^^^^^^^^^^^^
+}
+
 
 
 
