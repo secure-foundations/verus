@@ -249,6 +249,30 @@ proof fn test_opaque(b: bool) {
 }
 
 
+// example10: `reveal` does not flow
+#[verifier(opaque)]
+spec fn is_good_message_10(msg:Message) -> bool {
+//   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Note: this function is opaque
+  match msg {
+      Message::Quit(b) => b,
+      Message::Move{x, y} => is_good_integer_9( (x as int)  - (y as int)),
+      Message::Write(b) => b,
+  }
+}
+
+proof fn test_reveal(b: bool) {
+    let good_msg = Message::Move{x: 0, y: 0};
+    if b {
+      reveal(is_good_message_10);        
+    } else {
+      assert_by(true, {reveal(is_good_message_10);});
+      assert(is_good_message_10(good_msg));
+//    ^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^  
+    }
+}
+
+
+
 
 
 }

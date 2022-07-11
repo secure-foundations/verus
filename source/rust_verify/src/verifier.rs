@@ -330,15 +330,15 @@ impl Verifier {
 
                         if self.args.debug {
                             self.expand_targets.push(error.clone());
-                            let mut debugger = Debugger::new(
-                                air_model,
-                                assign_map,
-                                snap_map,
-                                compiler.session().source_map(),
-                                krate.datatypes.clone(),
-                                air_context,
-                                local_decls,
-                            );
+                            // let mut debugger = Debugger::new(
+                            //     air_model,
+                            //     assign_map,
+                            //     snap_map,
+                            //     compiler.session().source_map(),
+                            //     krate.datatypes.clone(),
+                            //     air_context,
+                            //     local_decls,
+                            // );
 
                             // TODO: move this to more appropriate location
                             // for now, this is commented to focus on error localization encoding

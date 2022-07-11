@@ -44,7 +44,7 @@ pub(crate) struct State {
     // If > 0, disable checking recommends (used to make sure pure expressions stay pure)
     disable_recommends: u64,
     // For debug purpose, track the status of fuel for each function. Since `reveal` statement can change the fuel locally.
-    reveal_map: Vec<HashMap<Fun, u32>>, //  <fun, fuel>
+    reveal_map: Vec<HashMap<Fun, u32>>, //  HashMap<Fun, fuel>
 }
 
 #[derive(Clone)]

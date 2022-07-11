@@ -150,8 +150,6 @@ fn tr_inline_function(
     fun: Function,
     exps: &Exps,
 ) -> Result<Exp, (Span, String)> {
-    // TODO: "reveal"
-    // want to know if there's preceding `reveals(f)` statement.
     // TODO: "hide" - check "FunctionAttrsX.hidden" of the function that owns this inlining thing.
     // TODO: `publish`, `visibility`
 
@@ -163,7 +161,7 @@ fn tr_inline_function(
     if fuel == 0 {
         return Err((fun.span.clone(), "Note: this function is opaque".to_string()));
     } else {
-        // TODO: recursive function inline. -- maybe just don't inlines?
+        // TODO: recursive function inline. -- maybe just don't inline?
         let body = fun.x.body.as_ref().unwrap();
         let params = &fun.x.params;
         let body_exp = pure_ast_expression_to_sst(ctx, body, params);
@@ -392,7 +390,7 @@ pub(crate) fn need_split_expression(ctx: &Ctx, span: &Span) -> bool {
             }
         } else {
             for sp in &err.spans {
-                // println!("error span: {:?}", sp);
+                println!("error span: {:?}", sp);
                 // TODO: is this string matching desirable??
                 if sp.as_string == span.as_string {
                     return true;
@@ -400,6 +398,6 @@ pub(crate) fn need_split_expression(ctx: &Ctx, span: &Span) -> bool {
             }
         }
     }
-    // println!("query span: {:?}", span);
+    println!("chose not to split. query span: {:?}", span);
     false
 }
