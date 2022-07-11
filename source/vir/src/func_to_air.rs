@@ -2,6 +2,7 @@ use crate::ast::{
     Function, FunctionKind, GenericBoundX, Ident, Idents, Mode, Param, ParamX, Params,
     SpannedTyped, Typ, TypX, Typs, VirErr,
 };
+use crate::ast_to_sst::State;
 use crate::ast_util::QUANT_FORALL;
 use crate::context::Ctx;
 use crate::def::{
@@ -652,6 +653,7 @@ pub fn func_def_to_air(
                         let error = air::errors::error("splitted ensures failure", &ens_exp.span);
                         let splitted_exprs = crate::split_expression::split_expr(
                             ctx,
+                            &mut State::new(), // TODO: get the final state from this body's translation
                             &crate::split_expression::TracedExpX::new(
                                 ens_exp.clone(),
                                 error.clone(),

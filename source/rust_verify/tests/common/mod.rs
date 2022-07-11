@@ -138,6 +138,10 @@ pub fn verify_files_and_pervasive(
         verifier.test_capture_output = Some(captured_output_1);
         let file_loader: TestFileLoader = TestFileLoader { files };
         let (verifier, status) = rust_verify::driver::run(verifier, rustc_args, file_loader);
+        println!("found errors: {}", verifier.errors.len());
+        println!("              {:?}", verifier.errors[0]);
+        println!("              {:?}", verifier.errors[1]);
+        println!(" ");
         status.map(|_| ()).map_err(|_| TestErr {
             errors: verifier.errors,
             has_vir_error: verifier.encountered_vir_error,

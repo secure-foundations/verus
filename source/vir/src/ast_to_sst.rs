@@ -43,6 +43,8 @@ pub(crate) struct State {
     pub(crate) ret_post: Option<(Option<UniqueIdent>, Vec<Stm>, Exps)>,
     // If > 0, disable checking recommends (used to make sure pure expressions stay pure)
     disable_recommends: u64,
+    // For debug purpose, track the status of fuel for each function. Since `reveal` statement can change the fuel locally.
+    reveal_map: Vec<HashMap<Fun, u32>>, //  <fun, fuel>
 }
 
 #[derive(Clone)]
@@ -92,6 +94,8 @@ impl State {
     pub fn new() -> Self {
         let mut rename_map = ScopeMap::new();
         rename_map.push_scope(true);
+        let mut reveal_map = Vec::new();
+        reveal_map.push(HashMap::new());
         State {
             view_as_spec: false,
             next_var: 0,
@@ -101,6 +105,7 @@ impl State {
             dont_rename: HashSet::new(),
             ret_post: None,
             disable_recommends: 0,
+            reveal_map,
         }
     }
 
@@ -203,6 +208,29 @@ impl State {
 
     fn checking_recommends(&self, ctx: &Ctx) -> bool {
         ctx.checking_recommends() && self.disable_recommends == 0
+    }
+
+    fn record_fuel(&mut self, x: &Fun, fuel: u32) {
+        let mut last = self.reveal_map.pop().unwrap();
+        last.insert(x.clone(), fuel);
+        self.reveal_map.push(last);
+    }
+
+    pub(crate) fn find_fuel(&self, x: &Fun) -> Option<u32> {
+        for rmap in &self.reveal_map {
+            if let Some(local_fuel) = rmap.get(x) {
+                return Some(*local_fuel);
+            }
+        }
+        None
+    }
+
+    // if some expr can contain `proof` block, push and pop around that proof block's translation
+    pub(crate) fn push_fuel_scope(&mut self) {
+        self.reveal_map.push(HashMap::new());
+    }
+    pub(crate) fn pop_fuel_scope(&mut self) {
+        self.reveal_map.pop();
     }
 }
 
@@ -575,6 +603,7 @@ fn stm_call(
             let error = air::errors::error("splitted assertion failure", span);
             let exprs = crate::split_expression::split_expr(
                 ctx,
+                state,
                 &crate::split_expression::TracedExpX::new(args[0].0.clone(), error.clone()),
                 false,
             );
@@ -595,6 +624,7 @@ fn stm_call(
                 let error = air::errors::error("splitted requires failure", span);
                 let exprs = crate::split_expression::split_expr(
                     ctx,
+                    state,
                     &crate::split_expression::TracedExpX::new(exp_subsituted, error.clone()),
                     false,
                 );
@@ -1066,6 +1096,7 @@ fn expr_to_stm_opt(
         }
         ExprX::Fuel(x, fuel) => {
             let stm = Spanned::new(expr.span.clone(), StmX::Fuel(x.clone(), *fuel));
+            state.record_fuel(x, *fuel);
             Ok((vec![stm], ReturnValue::ImplicitUnit(expr.span.clone())))
         }
         ExprX::Header(_) => {
@@ -1091,7 +1122,9 @@ fn expr_to_stm_opt(
                 let x = state.declare_new_var(&var.name, &var.a, false, true);
                 body.push(assume_has_typ(&x, &var.a, &require.span));
             }
+            state.push_fuel_scope();
             let (mut proof_stms, e) = expr_to_stm_opt(ctx, state, proof)?;
+            state.pop_fuel_scope();
             if let ReturnValue::Some(_) = e {
                 return err_str(&expr.span, "forall/assert-by cannot end with an expression");
             }
@@ -1137,7 +1170,9 @@ fn expr_to_stm_opt(
                 inner_body.push(assume);
             }
 
+            state.push_fuel_scope();
             let (proof_stms, e) = expr_to_stm_opt(ctx, state, proof)?;
+            state.pop_fuel_scope();
             if let ReturnValue::Some(_) = e {
                 return err_str(&expr.span, "forall/assert-by cannot end with an expression");
             }
@@ -1207,16 +1242,26 @@ fn expr_to_stm_opt(
             Ok((vec![assert], ret))
         }
         ExprX::If(expr0, expr1, None) => {
+            state.push_fuel_scope();
             let (stms0, e0) = expr_to_stm_opt(ctx, state, expr0)?;
+            state.pop_fuel_scope();
+            state.push_fuel_scope();
             let (stms1, e1) = expr_to_stm_opt(ctx, state, expr1)?;
+            state.pop_fuel_scope();
             let stms2 = vec![];
             let e2 = ReturnValue::ImplicitUnit(expr.span.clone());
             Ok(if_to_stm(state, expr, stms0, &e0, stms1, &e1, stms2, &e2))
         }
         ExprX::If(expr0, expr1, Some(expr2)) => {
+            state.push_fuel_scope();
             let (stms0, e0) = expr_to_stm_opt(ctx, state, expr0)?;
+            state.pop_fuel_scope();
+            state.push_fuel_scope();
             let (stms1, e1) = expr_to_stm_opt(ctx, state, expr1)?;
+            state.pop_fuel_scope();
+            state.push_fuel_scope();
             let (stms2, e2) = expr_to_stm_opt(ctx, state, expr2)?;
+            state.pop_fuel_scope();
             Ok(if_to_stm(state, expr, stms0, &e0, stms1, &e1, stms2, &e2))
         }
         ExprX::Match(..) => {
@@ -1236,7 +1281,9 @@ fn expr_to_stm_opt(
                 }
             };
 
+            state.push_fuel_scope();
             let (mut stms1, e1) = expr_to_stm_opt(ctx, state, body)?;
+            state.pop_fuel_scope();
             check_unit_or_never(&e1)?;
             let (check_recommends, invs): (Vec<Vec<Stm>>, Vec<Exp>) =
                 vec_map_result(invs, |e| expr_to_pure_exp_check(ctx, state, e))?

@@ -222,14 +222,15 @@ proof fn test_ensures_failure(b: bool) -> (good_msg: Message)
 }
 
 
-// example9: opaque
+// example9: opaque/reveal
 #[verifier(opaque)]
 spec fn is_good_integer_9(x: int) -> bool 
-//   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot inline opaque function
+//   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Note: this function is opaque
 {
   x >= 0 && x != 5
 }
 
+#[verifier(opaque)]
 spec fn is_good_message_9(msg:Message) -> bool {
   match msg {
       Message::Quit(b) => b,
@@ -240,13 +241,11 @@ spec fn is_good_message_9(msg:Message) -> bool {
 }
 
 
-proof fn test_opaque(b: bool) -> (good_msg: Message)
-  ensures
-    is_good_message_9(good_msg),
-//  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-{
-  Message::Move{x: 0, y: 5}
+proof fn test_opaque(b: bool) {
+    let good_msg = Message::Move{x: 0, y: 0};
+    reveal(is_good_message_9);
+    assert(is_good_message_9(good_msg));
+//  ^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 }
 
 

@@ -1,5 +1,5 @@
-use crate::ast::{BinaryOp, Expr, Function, Params, SpannedTyped, Typ, TypX, UnaryOp};
-use crate::ast_to_sst::{expr_to_pure_exp, get_function};
+use crate::ast::{BinaryOp, Expr, Fun, Function, Params, SpannedTyped, Typ, TypX, UnaryOp};
+use crate::ast_to_sst::{expr_to_pure_exp, get_function, State};
 use crate::context::Ctx;
 use crate::def::Spanned;
 use crate::sst::{Bnd, BndX, Exp, ExpX, Exps, Stm, StmX};
@@ -144,16 +144,31 @@ pub(crate) fn pure_ast_expression_to_sst(ctx: &Ctx, body: &Expr, params: &Params
     state.finalize_exp(&body_exp)
 }
 
-// simply inline, the caller of `inline` should call `split_expr` with the inlined expr.
-fn tr_inline_function(ctx: &Ctx, fun: Function, exps: &Exps) -> Result<Exp, (Span, String)> {
-    // TODO: is checking fuel enough?
-    if fun.x.fuel == 0 {
-        return Err((fun.span.clone(), "cannot inline opaque function".to_string()));
+fn tr_inline_function(
+    ctx: &Ctx,
+    state: &State,
+    fun: Function,
+    exps: &Exps,
+) -> Result<Exp, (Span, String)> {
+    // TODO: "reveal"
+    // want to know if there's preceding `reveals(f)` statement.
+    // TODO: "hide" - check "FunctionAttrsX.hidden" of the function that owns this inlining thing.
+    // TODO: `publish`, `visibility`
+
+    let fuel = match state.find_fuel(&fun.x.name) {
+        Some(fuel) => fuel, // prefer local_fuel on fun.x.fuel
+        None => fun.x.fuel,
+    };
+
+    if fuel == 0 {
+        return Err((fun.span.clone(), "Note: this function is opaque".to_string()));
+    } else {
+        // TODO: recursive function inline. -- maybe just don't inlines?
+        let body = fun.x.body.as_ref().unwrap();
+        let params = &fun.x.params;
+        let body_exp = pure_ast_expression_to_sst(ctx, body, params);
+        return tr_inline_expression(&body_exp, params, exps);
     }
-    let body = fun.x.body.as_ref().unwrap();
-    let params = &fun.x.params;
-    let body_exp = pure_ast_expression_to_sst(ctx, body, params);
-    return tr_inline_expression(&body_exp, params, exps);
 }
 
 // trace
@@ -190,7 +205,7 @@ fn merge_two_es(es1: TracedExps, es2: TracedExps) -> TracedExps {
 
 // Note: this splitting referenced Dafny
 // https://github.com/dafny-lang/dafny/blob/cf285b9282499c46eb24f05c7ecc7c72423cd878/Source/Dafny/Verifier/Translator.cs#L11100
-pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
+pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: bool) -> TracedExps {
     match *exp.e.typ {
         TypX::Bool => (),
         _ => panic!("cannot split non boolean expression"),
@@ -204,29 +219,49 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
                     "This leftmost boolean-not negated the highlighted expression",
                 ),
             );
-            return split_expr(ctx, &tr_exp, !negated);
+            return split_expr(ctx, state, &tr_exp, !negated);
         }
         ExpX::Binary(bop, e1, e2) => {
             match bop {
                 BinaryOp::And if !negated => {
-                    let es1 =
-                        split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), false);
-                    let es2 =
-                        split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), false);
+                    let es1 = split_expr(
+                        ctx,
+                        state,
+                        &TracedExpX::new(e1.clone(), exp.trace.clone()),
+                        false,
+                    );
+                    let es2 = split_expr(
+                        ctx,
+                        state,
+                        &TracedExpX::new(e2.clone(), exp.trace.clone()),
+                        false,
+                    );
                     return merge_two_es(es1, es2);
                 }
                 // apply DeMorgan's Law
                 BinaryOp::Or if negated => {
-                    let es1 =
-                        split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), true);
-                    let es2 =
-                        split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), true);
+                    let es1 = split_expr(
+                        ctx,
+                        state,
+                        &TracedExpX::new(e1.clone(), exp.trace.clone()),
+                        true,
+                    );
+                    let es2 = split_expr(
+                        ctx,
+                        state,
+                        &TracedExpX::new(e2.clone(), exp.trace.clone()),
+                        true,
+                    );
                     return merge_two_es(es1, es2);
                 }
                 // in case of implies, split rhs. (e.g.  A => (B && C)  to  [ (A => B) , (A => C) ] )
                 BinaryOp::Implies if !negated => {
-                    let es2 =
-                        split_expr(ctx, &TracedExpX::new(e2.clone(), exp.trace.clone()), negated);
+                    let es2 = split_expr(
+                        ctx,
+                        state,
+                        &TracedExpX::new(e2.clone(), exp.trace.clone()),
+                        negated,
+                    );
                     let mut splitted: Vec<TracedExp> = vec![];
                     for e in &*es2 {
                         let new_e = ExpX::Binary(BinaryOp::Implies, e1.clone(), e.e.clone());
@@ -244,7 +279,7 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
         }
         ExpX::Call(fun_name, typs, exps) => {
             let fun = get_function(ctx, &exp.e.span, fun_name).unwrap();
-            let res_inlined_exp = tr_inline_function(ctx, fun, exps);
+            let res_inlined_exp = tr_inline_function(ctx, state, fun, exps);
             match res_inlined_exp {
                 Ok(inlined_exp) => {
                     // println!("inlined exp: {:?}", inlined_exp);
@@ -252,10 +287,10 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
                         inlined_exp,
                         exp.trace.primary_label(&exp.e.span, "TODO: pretty print inlined expr"),
                     );
-                    return split_expr(ctx, &inlined_tr_exp, negated);
+                    return split_expr(ctx, state, &inlined_tr_exp, negated);
                 }
                 Err((sp, msg)) => {
-                    println!("inline failed for {:?}", fun_name);
+                    // println!("inline failed for {:?}", fun_name);
                     let not_inlined_exp =
                         TracedExpX::new(exp.e.clone(), exp.trace.primary_label(&sp, msg));
                     // stop inlining. treat as atom
@@ -276,14 +311,23 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
             let else_e = ExpX::Binary(BinaryOp::Implies, not_e1, e3.clone());
             let else_exp = SpannedTyped::new(&e3.span, &exp.e.typ, else_e);
 
-            let es1 =
-                split_expr(ctx, &TracedExpX::new(then_exp.clone(), exp.trace.clone()), negated);
-            let es2 =
-                split_expr(ctx, &TracedExpX::new(else_exp.clone(), exp.trace.clone()), negated);
+            let es1 = split_expr(
+                ctx,
+                state,
+                &TracedExpX::new(then_exp.clone(), exp.trace.clone()),
+                negated,
+            );
+            let es2 = split_expr(
+                ctx,
+                state,
+                &TracedExpX::new(else_exp.clone(), exp.trace.clone()),
+                negated,
+            );
             return merge_two_es(es1, es2);
         }
         ExpX::UnaryOpr(uop, e1) => {
-            let es1 = split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
+            let es1 =
+                split_expr(ctx, state, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 let new_e = ExpX::UnaryOpr(uop.clone(), e.e.clone());
@@ -294,7 +338,11 @@ pub fn split_expr(ctx: &Ctx, exp: &TracedExp, negated: bool) -> TracedExps {
             return Arc::new(splitted);
         }
         ExpX::Bind(bnd, e1) => {
-            let es1 = split_expr(ctx, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
+            let es1 =
+                split_expr(ctx, state, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
+            // TODO
+            // split on `forall`, but not on `exists`
+            // split on another binders?
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 // REVIEW: should I split expression in `let sth = exp`?

@@ -843,16 +843,21 @@ impl Verifier {
         }
 
         let before_err_count = self.count_errors;
+        self.expand_targets = vec![]; // flush old errors
+        println!("initial run");
         self.verify_module(compiler, &poly_krate, &mut air_context, &mut ctx)?;
 
         // In the presence of error, re-verify this module with "splitted expressions" of failing assertions/requires/ensures
         // to get more precise error message.
-        if self.args.debug && !self.encountered_vir_error && before_err_count < self.count_errors {
+        // might separate into `self.debug_module(..)`
+        if !self.encountered_vir_error && before_err_count < self.count_errors {
+            // self.args.debug &&
             // TODO: log in a different file?
+            println!("rerun with debug flag");
             let mut air_context = self.new_air_context_with_prelude(module, None, false)?;
             ctx.debug_expand_targets = self.expand_targets.to_vec(); // TODO: avoid copying
-            self.expand_targets = vec![]; // flush old errors
-            self.verify_module(compiler, &poly_krate, &mut air_context, &mut ctx)?;
+            ctx.debug = true;
+            self.verify_module(compiler, &poly_krate, &mut air_context, &mut ctx)?; // maybe report error it is new?(not reporting if it had no impact)
             self.expand_targets = vec![]; // flush errors from this second run
         }
 
