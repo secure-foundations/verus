@@ -280,14 +280,31 @@ spec fn is_good_integer_11(x: int) -> bool
 
 proof fn test_hide(b: bool) 
 {
-   hide(is_good_integer);
+   hide(is_good_integer_11);
    let i = 0;
-   assert(is_good_integer(i));
+   assert(is_good_integer_11(i));
 // ^^^^^^ ^^^^^^^^^^^^^^^^^^
 }
 
 
+// example12: publish
+mod M3 {
+  pub closed spec fn is_good_integer(x: builtin::int) -> bool 
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Note: this function is closed at the module boundary
+  {
+    x >= 0 && x != 5
+  }
+}
 
-
+mod M4 {
+  #[allow(unused_imports)]
+  use crate::M3;
+  proof fn test_publish(b: bool) 
+  {
+    let i = 0;
+    assert(M3::is_good_integer(i));
+  //^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^
+  }
+}
 
 }

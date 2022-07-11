@@ -151,15 +151,17 @@ fn tr_inline_function(
     exps: &Exps,
     span: &Span,
 ) -> Result<Exp, (Span, String)> {
-    // TODO: "hide" - check "FunctionAttrsX.hidden" of the function that owns this inlining thing.
-    // TODO: `publish`, `visibility`
-
+    let opaque_err = Err((fun_to_inline.span.clone(), "Note: this function is opaque".to_string()));
+    let closed_err = Err((
+        fun_to_inline.span.clone(),
+        "Note: this function is closed at the module boundary".to_string(),
+    ));
     let mut found_local_fuel = false;
     let fuel = match state.find_fuel(&fun_to_inline.x.name) {
-        Some(fuel) => {
+        Some(local_fuel) => {
             found_local_fuel = true;
-            fuel
-        } // prefer local_fuel on fun.x.fuel, this track `reveal` statement
+            local_fuel
+        } // prefer local_fuel on fun.x.fuel. local_fuel tracks `reveal` statements
         None => fun_to_inline.x.fuel,
     };
 
@@ -178,10 +180,26 @@ fn tr_inline_function(
     };
 
     if fuel == 0 || (!found_local_fuel && hidden) {
-        return Err((fun_to_inline.span.clone(), "Note: this function is opaque".to_string()));
+        return opaque_err;
     } else {
         // TODO: recursive function inline. -- maybe just don't inline?
-        let body = fun_to_inline.x.body.as_ref().unwrap();
+        // track `open` `closed` at module boundaries
+        match fun_to_inline.x.publish {
+            Some(b) => {
+                if !b {
+                    return opaque_err;
+                }
+            }
+            None => {
+                return closed_err;
+            }
+        };
+        let body = match fun_to_inline.x.body.as_ref() {
+            Some(body) => body,
+            None => {
+                return closed_err;
+            }
+        };
         let params = &fun_to_inline.x.params;
         let body_exp = pure_ast_expression_to_sst(ctx, body, params);
         return tr_inline_expression(&body_exp, params, exps);
