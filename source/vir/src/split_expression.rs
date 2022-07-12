@@ -135,6 +135,7 @@ pub(crate) fn tr_inline_expression(
     return subsitute_argument(body_exp, &arg_map);
 }
 
+// TODO: see if I can use `expr_to_exp_as_spec` instead of below one
 pub(crate) fn pure_ast_expression_to_sst(ctx: &Ctx, body: &Expr, params: &Params) -> Exp {
     let pars = crate::func_to_air::params_to_pars(params, false);
     let mut state = crate::ast_to_sst::State::new();
@@ -151,10 +152,15 @@ fn tr_inline_function(
     exps: &Exps,
     span: &Span,
 ) -> Result<Exp, (Span, String)> {
+    // TODO: recursive function inline. -- maybe just don't inline?
     let opaque_err = Err((fun_to_inline.span.clone(), "Note: this function is opaque".to_string()));
     let closed_err = Err((
         fun_to_inline.span.clone(),
         "Note: this function is closed at the module boundary".to_string(),
+    ));
+    let foriegn_module_err = Err((
+        fun_to_inline.span.clone(),
+        "Note: this function is inside a foriegn module".to_string(),
     ));
     let mut found_local_fuel = false;
     let fuel = match state.find_fuel(&fun_to_inline.x.name) {
@@ -182,18 +188,24 @@ fn tr_inline_function(
     if fuel == 0 || (!found_local_fuel && hidden) {
         return opaque_err;
     } else {
-        // TODO: recursive function inline. -- maybe just don't inline?
-        // track `open` `closed` at module boundaries
-        match fun_to_inline.x.publish {
-            Some(b) => {
-                if !b {
-                    return opaque_err;
-                }
+        if fun_to_inline.x.visibility.owning_module.is_none() {
+            return foriegn_module_err;
+        } else {
+            if *ctx.module != **fun_to_inline.x.visibility.owning_module.as_ref().unwrap() {
+                // if the target inline function is outside this module, track `open` `closed` at module boundaries
+                match fun_to_inline.x.publish {
+                    Some(b) => {
+                        if !b {
+                            return opaque_err;
+                        }
+                    }
+                    None => {
+                        return closed_err;
+                    }
+                };
             }
-            None => {
-                return closed_err;
-            }
-        };
+        }
+            
         let body = match fun_to_inline.x.body.as_ref() {
             Some(body) => body,
             None => {
@@ -221,10 +233,20 @@ impl TracedExpX {
     }
 }
 
-fn negate_atom(exp: &TracedExp) -> TracedExp {
+fn negate_atom(exp: TracedExp) -> TracedExp {
     let negated_expx = ExpX::Unary(UnaryOp::Not, exp.e.clone());
     let negated_exp = SpannedTyped::new(&exp.e.span, &exp.e.typ, negated_expx);
     TracedExpX::new(negated_exp, exp.trace.clone())
+}
+
+macro_rules! return_atom {
+    ($e:expr, $negated:expr) => {
+        if $negated {
+            return Arc::new(vec![negate_atom($e)]);
+        } else {
+            return Arc::new(vec![$e]);
+        }
+    }
 }
 
 fn merge_two_es(es1: TracedExps, es2: TracedExps) -> TracedExps {
@@ -308,8 +330,7 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
                 }
                 // TODO
                 // BinaryOp::Implies if negated
-                _ if negated => return Arc::new(vec![negate_atom(exp)]),
-                _ => return Arc::new(vec![exp.clone()]),
+                _ => return_atom!(exp.clone(), negated),
             }
         }
         ExpX::Call(fun_name, typs, exps) => {
@@ -329,11 +350,7 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
                     let not_inlined_exp =
                         TracedExpX::new(exp.e.clone(), exp.trace.primary_label(&sp, msg));
                     // stop inlining. treat as atom
-                    if negated {
-                        return Arc::new(vec![negate_atom(&not_inlined_exp)]);
-                    } else {
-                        return Arc::new(vec![not_inlined_exp]);
-                    }
+                    return_atom!(not_inlined_exp, negated);
                 }
             }
         }
@@ -375,9 +392,9 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
         ExpX::Bind(bnd, e1) => {
             let es1 =
                 split_expr(ctx, state, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
-            // TODO
-            // split on `forall`, but not on `exists`
-            // split on another binders?
+            // TODO: Let, Lambda, Choose
+            // split on `forall` with !neagted, split on `exists` with negated
+
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 // REVIEW: should I split expression in `let sth = exp`?
@@ -392,11 +409,7 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
         // TODO: more cases
 
         // cases that cannot be splitted. "atom" boolean expressions
-        _ if negated => return Arc::new(vec![negate_atom(exp)]),
-        _ => {
-            // println!("unsplitted: {:?}", exp.e.x);
-            return Arc::new(vec![exp.clone()]);
-        }
+        _ => return_atom!(exp.clone(), negated),
     }
 }
 
