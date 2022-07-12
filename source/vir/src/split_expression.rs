@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOp, Expr, Fun, Function, Params, SpannedTyped, Typ, TypX, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Fun, Function, Params, Quant, SpannedTyped, Typ, TypX, UnaryOp};
 use crate::ast_to_sst::{expr_to_pure_exp, get_function, State};
 use crate::context::Ctx;
 use crate::def::Spanned;
@@ -205,7 +205,7 @@ fn tr_inline_function(
                 };
             }
         }
-            
+
         let body = match fun_to_inline.x.body.as_ref() {
             Some(body) => body,
             None => {
@@ -246,7 +246,7 @@ macro_rules! return_atom {
         } else {
             return Arc::new(vec![$e]);
         }
-    }
+    };
 }
 
 fn merge_two_es(es1: TracedExps, es2: TracedExps) -> TracedExps {
@@ -390,11 +390,19 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
             return Arc::new(splitted);
         }
         ExpX::Bind(bnd, e1) => {
+            // TODO: split on `exists` when negated
+            // TODO: Let, Lambda, Choose
+            // split on `forall` when !neagted,
+            match bnd.x {
+                BndX::Quant(Quant { quant: air::ast::Quant::Forall, boxed_params: _ }, _, _)
+                    if !negated =>
+                {
+                    ()
+                }
+                _ => return_atom!(exp.clone(), negated),
+            };
             let es1 =
                 split_expr(ctx, state, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated);
-            // TODO: Let, Lambda, Choose
-            // split on `forall` with !neagted, split on `exists` with negated
-
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 // REVIEW: should I split expression in `let sth = exp`?
