@@ -137,12 +137,17 @@ pub(crate) fn tr_inline_expression(
 
 // TODO: see if I can use `expr_to_exp_as_spec` instead of below one
 pub(crate) fn pure_ast_expression_to_sst(ctx: &Ctx, body: &Expr, params: &Params) -> Exp {
-    let pars = crate::func_to_air::params_to_pars(params, false);
-    let mut state = crate::ast_to_sst::State::new();
-    state.declare_params(&pars);
-    state.view_as_spec = true;
-    let body_exp = expr_to_pure_exp(&ctx, &mut state, &body).expect("pure_ast_expression_to_sst");
-    state.finalize_exp(&body_exp)
+    // let pars = crate::func_to_air::params_to_pars(params, false);
+    // let mut state = crate::ast_to_sst::State::new();
+    // state.declare_params(&pars);
+    // state.view_as_spec = true;
+    // let body_exp = expr_to_pure_exp(&ctx, &mut state, &body).expect("pure_ast_expression_to_sst");
+    // state.finalize_exp(&body_exp)
+    crate::ast_to_sst::expr_to_exp_as_spec(
+        &ctx,
+        &crate::func_to_air::params_to_pars(params, false),
+        &body,
+    ).expect("pure_ast_expression_to_sst")
 }
 
 fn tr_inline_function(
@@ -152,7 +157,7 @@ fn tr_inline_function(
     exps: &Exps,
     span: &Span,
 ) -> Result<Exp, (Span, String)> {
-    // TODO: recursive function inline. -- maybe just don't inline?
+    // TODO: recursive function inline. don't inline
     let opaque_err = Err((fun_to_inline.span.clone(), "Note: this function is opaque".to_string()));
     let closed_err = Err((
         fun_to_inline.span.clone(),
@@ -335,20 +340,22 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
         }
         ExpX::Call(fun_name, typs, exps) => {
             let fun = get_function(ctx, &exp.e.span, fun_name).unwrap();
+            // println!("{:?}", &fun.span.as_string);
+            // println!("{:?}", exps[0].span.as_string);
             let res_inlined_exp = tr_inline_function(ctx, state, fun, exps, &exp.e.span);
             match res_inlined_exp {
                 Ok(inlined_exp) => {
                     // println!("inlined exp: {:?}", inlined_exp);
                     let inlined_tr_exp = TracedExpX::new(
                         inlined_exp,
-                        exp.trace.primary_label(&exp.e.span, "TODO: pretty print inlined expr"),
+                        exp.trace.secondary_label(&exp.e.span, "inlining this function call"), // TODO: pretty print inlined expr
                     );
                     return split_expr(ctx, state, &inlined_tr_exp, negated);
                 }
                 Err((sp, msg)) => {
-                    // println!("inline failed for {:?}", fun_name);
+                    println!("inline failed for {:?}", fun_name);
                     let not_inlined_exp =
-                        TracedExpX::new(exp.e.clone(), exp.trace.primary_label(&sp, msg));
+                        TracedExpX::new(exp.e.clone(), exp.trace.secondary_label(&sp, msg));
                     // stop inlining. treat as atom
                     return_atom!(not_inlined_exp, negated);
                 }
@@ -391,14 +398,12 @@ pub(crate) fn split_expr(ctx: &Ctx, state: &State, exp: &TracedExp, negated: boo
         }
         ExpX::Bind(bnd, e1) => {
             // TODO: split on `exists` when negated
-            // TODO: Let, Lambda, Choose
+            // TODO: Lambda, Choose
             // split on `forall` when !neagted,
             match bnd.x {
                 BndX::Quant(Quant { quant: air::ast::Quant::Forall, boxed_params: _ }, _, _)
-                    if !negated =>
-                {
-                    ()
-                }
+                    if !negated => (),
+                BndX::Let(..) => (),
                 _ => return_atom!(exp.clone(), negated),
             };
             let es1 =
@@ -434,7 +439,7 @@ pub(crate) fn register_splitted_assertions(traced_exprs: TracedExps) -> Vec<Stm>
 
 pub(crate) fn need_split_expression(ctx: &Ctx, span: &Span) -> bool {
     for err in &*ctx.debug_expand_targets {
-        // println!("error msg: {:?}", err.msg);
+        // println!("target error msg: {:?}", err.msg);
         // TODO: make this message in a def.rs somewhere
         if err.msg == "postcondition not satisfied".to_string() {
             for label in &err.labels {

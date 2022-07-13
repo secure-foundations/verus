@@ -53,8 +53,10 @@ pub struct Verifier {
     air_no_span: Option<air::ast::Span>,
     inferred_modes: Option<HashMap<InferMode, Mode>>,
 
-    // debugging purposes
-    expand_targets: Vec<air::errors::Error>,
+    // debugging aid purposes
+    expand_flag: bool,
+    pub expand_targets: Vec<air::errors::Error>,
+    pub expanded_errors: Vec<Vec<ErrorSpan>>,
 }
 
 #[derive(Debug)]
@@ -176,7 +178,9 @@ impl Verifier {
             air_no_span: None,
             inferred_modes: None,
 
+            expand_flag: false,
             expand_targets: vec![],
+            expanded_errors: vec![],
         }
     }
 
@@ -311,6 +315,7 @@ impl Verifier {
                         invalidity = true;
                     }
                     compiler.report_error(&error, error_as);
+                    
 
                     if error_as == ErrorAs::Error {
                         let mut errors = vec![ErrorSpan::new_from_air_span(
@@ -325,11 +330,20 @@ impl Verifier {
                                 span,
                             ));
                         }
-
-                        self.errors.push(errors);
-
-                        if self.args.debug {
+                        if !self.expand_flag {
+                            self.errors.push(errors);
                             self.expand_targets.push(error.clone());
+                        } else {
+                            println!("labels {:?}", error.labels);
+                            println!("errors {:?}", errors);
+                            println!("expand targetss {:?}", self.expand_targets);
+                            
+                            self.expanded_errors.push(errors);
+                        }
+                        
+                        
+                        // if self.args.debug {
+                            // self.expand_targets.push(error.clone());
                             // let mut debugger = Debugger::new(
                             //     air_model,
                             //     assign_map,
@@ -343,7 +357,7 @@ impl Verifier {
                             // TODO: move this to more appropriate location
                             // for now, this is commented to focus on error localization encoding
                             // debugger.start_shell(air_context);
-                        }
+                        // }
                     }
 
                     if self.args.multiple_errors == 0 {
@@ -853,12 +867,14 @@ impl Verifier {
         if !self.encountered_vir_error && before_err_count < self.count_errors {
             // self.args.debug &&
             // TODO: log in a different file?
-            println!("rerun with debug flag");
             let mut air_context = self.new_air_context_with_prelude(module, None, false)?;
             ctx.debug_expand_targets = self.expand_targets.to_vec(); // TODO: avoid copying
             ctx.debug = true;
+            self.expand_flag = true;
+            println!("rerun with debug flag");
             self.verify_module(compiler, &poly_krate, &mut air_context, &mut ctx)?; // maybe report error it is new?(not reporting if it had no impact)
-            self.expand_targets = vec![]; // flush errors from this second run
+            // self.expand_targets = vec![]; // flush errors from this second run
+            self.expand_flag = false;
         }
 
         global_ctx = ctx.free();
@@ -1215,6 +1231,7 @@ impl rustc_driver::Callbacks for VerifierCallbacks {
                 }
             }
         });
+        println!("hey from after expansion");
         rustc_driver::Compilation::Stop
     }
 }

@@ -49,6 +49,7 @@ pub struct TestErr {
     pub errors: Vec<Vec<ErrorSpan>>,
     pub has_vir_error: bool,
     pub output: String,
+    pub debug_errors: Vec<Vec<ErrorSpan>>,
 }
 
 #[allow(dead_code)]
@@ -138,14 +139,12 @@ pub fn verify_files_and_pervasive(
         verifier.test_capture_output = Some(captured_output_1);
         let file_loader: TestFileLoader = TestFileLoader { files };
         let (verifier, status) = rust_verify::driver::run(verifier, rustc_args, file_loader);
-        println!("found errors: {}", verifier.errors.len());
-        println!("              {:?}", verifier.errors[0]);
-        println!("              {:?}", verifier.errors[1]);
-        println!(" ");
+        let _  = verifier.expand_targets.iter().map(|e| println!("expand targets: {:?}", e));
         status.map(|_| ()).map_err(|_| TestErr {
             errors: verifier.errors,
             has_vir_error: verifier.encountered_vir_error,
             output: "".to_string(),
+            debug_errors: verifier.expanded_errors,
         })
     });
     let output = std::str::from_utf8(
@@ -240,6 +239,20 @@ pub fn assert_fails(err: TestErr, count: usize) {
     for c in 0..count {
         assert!(relevant_error_span(&err.errors[c]).test_span_line.contains("FAILS"));
     }
+}
+
+#[allow(dead_code)]
+pub fn assert_fails_expanded(err: TestErr, count: usize) {
+    println!("test debug err: {:?}", err.debug_errors);
+    println!("test normal err: {:?}", err.errors);
+    let mut total_cnt = 0;
+    for e in &err.debug_errors {
+        total_cnt = total_cnt + e.len();
+    }
+    assert_eq!(total_cnt, count);
+    // for c in 0..count {
+    //     assert!(relevant_error_span(&err.debug_errors[c]).test_span_line.contains("FAILS"));
+    // }
 }
 
 #[allow(dead_code)]
