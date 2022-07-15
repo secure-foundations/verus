@@ -259,6 +259,9 @@ pub enum Constant {
     Bool(bool),
     /// non-negative integer of arbitrary size (IntRange::Nat); use subtraction to get negative numbers
     Nat(Arc<String>),
+    /// A constant string the second argument is used to indicate 
+    /// if the compiler should "reveal" it or not. 
+    StrSlice(Arc<String>, bool)
 }
 
 #[derive(Debug)]
@@ -561,6 +564,7 @@ pub struct FunctionX {
     /// However, if ret.x.mode != Spec, there are some differences: the const can dually be used as spec,
     /// and the body is restricted to a subset of expressions that are spec-safe.
     pub is_const: bool,
+    pub is_string_literal: bool,
     /// For public spec functions, publish == None means that the body is private
     /// even though the function is public, the bool indicates false = opaque, true = visible
     /// the body is public

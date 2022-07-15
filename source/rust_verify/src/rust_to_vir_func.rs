@@ -9,9 +9,9 @@ use crate::rust_to_vir_expr::{expr_to_vir, pat_to_var, ExprModifier};
 use crate::util::{err_span_str, err_span_string, spanned_new, unsupported_err_span};
 use crate::{unsupported, unsupported_err, unsupported_err_unless, unsupported_unless};
 use rustc_ast::Attribute;
-use rustc_hir::{Body, BodyId, FnDecl, FnHeader, FnSig, Generics, Param, Unsafety};
+use rustc_hir::{Body, BodyId, FnDecl, FnHeader, FnSig, Generics, Param, TyKind, Unsafety, QPath, PrimTy, def::Res, FnRetTy, Ty};
 use rustc_middle::ty::TyCtxt;
-use rustc_span::symbol::Ident;
+use rustc_span::symbol::{Ident, Symbol};
 use rustc_span::Span;
 use std::sync::Arc;
 use vir::ast::{
@@ -90,6 +90,58 @@ fn find_body<'tcx>(ctxt: &Context<'tcx>, body_id: &BodyId) -> &'tcx Body<'tcx> {
     panic!("Body not found");
 }
 
+
+fn check_strslice_new<'tcx>(sig: &'tcx FnSig<'tcx>) -> Result<(), VirErr> {
+
+    let (decl, span) = match sig {
+        FnSig { header: _, decl, span } => (decl, span),
+    };
+
+    let sig_span = span;
+    
+    let expected_input_num = 1;
+    if decl.inputs.len() != expected_input_num {
+        crate::err!(*span, format!("Expected {} input for StrSlice::new but got {}", expected_input_num, decl.inputs.len()));
+    }
+
+
+    let (kind, span) = match &decl.inputs[0].kind {
+        TyKind::Rptr(_, muty) => (&muty.ty.kind, muty.ty.span),
+        _ => crate::err!(decl.inputs[0].span, format!("Expected a Rptr") ),
+    };
+
+    
+    
+
+    let (res, span) = match kind {
+        TyKind::Path( QPath::Resolved(_, path)) => (path.res, path.span),
+        _ => crate::err!(span, format!("Expected a resolved path"))
+    };
+
+    if res != Res::PrimTy(PrimTy::Str) {
+        crate::err!(span, format!("Expected primitive type str"));
+    }
+    
+    
+    let (kind, span) = match decl.output {
+        FnRetTy::Return( Ty {hir_id: _, kind, span} ) => (kind, span),
+        _ => crate::err!(*sig_span, format!(""))
+    };
+
+
+
+    let (res, span) = match kind {
+        TyKind::Path( QPath::Resolved(_, path)) => (path.res, path.span), 
+        _ => crate::err!(*span, format!("Expected a resolved path"))
+    };
+
+    match res {
+        Res::SelfTy(_, _) => {}, 
+        _ => crate::err!(span, format!("Expected a Self, while StrSlice<'a> is a valid return type, this isn't suppported at the moment"))
+    };
+    Ok(())
+}
+
 pub(crate) fn check_item_fn<'tcx>(
     ctxt: &Context<'tcx>,
     vir: &mut KrateX,
@@ -105,7 +157,9 @@ pub(crate) fn check_item_fn<'tcx>(
     body_id: &BodyId,
 ) -> Result<Option<Fun>, VirErr> {
     let path = def_id_to_vir_path(ctxt.tcx, id);
-    let name = Arc::new(FunX { path, trait_path: trait_path });
+    let is_str_new = ctxt.tcx.is_diagnostic_item(Symbol::intern("pervasive::string::StrSlice::new"), id);
+
+    let name = Arc::new(FunX { path: path.clone(), trait_path });
     let mode = get_mode(Mode::Exec, attrs);
     let self_typ_params = if let Some(cg) = self_generics {
         Some(check_generics_bounds_fun(ctxt.tcx, cg)?)
@@ -133,6 +187,21 @@ pub(crate) fn check_item_fn<'tcx>(
     let sig_typ_bounds = check_generics_bounds_fun(ctxt.tcx, generics)?;
     let vattrs = get_verifier_attrs(attrs)?;
     let fuel = get_fuel(&vattrs);
+    
+    if is_str_new {
+        let mut erasure_info = ctxt.erasure_info.borrow_mut();
+        unsupported_err_unless!(
+            vattrs.external_body,
+            sig.span,
+            "StrSlice::new must be external_body"
+        ); 
+
+        check_strslice_new(sig)?;
+        erasure_info.ignored_functions.push(sig.span.data());
+        erasure_info.external_functions.push(name);
+        return Ok(None);
+    }
+
     if vattrs.external {
         let mut erasure_info = ctxt.erasure_info.borrow_mut();
         erasure_info.external_functions.push(name);
@@ -141,6 +210,8 @@ pub(crate) fn check_item_fn<'tcx>(
     let body = find_body(ctxt, body_id);
     let Body { params, value: _, generator_kind } = body;
     let mut vir_params: Vec<vir::ast::Param> = Vec::new();
+    
+
     for (param, input) in params.iter().zip(sig.decl.inputs.iter()) {
         let Param { hir_id, pat, ty_span: _, span } = param;
         let name = Arc::new(pat_to_var(pat));
@@ -277,6 +348,7 @@ pub(crate) fn check_item_fn<'tcx>(
         broadcast_forall: None,
         mask_spec: header.invariant_mask,
         is_const: false,
+        is_string_literal: false,
         publish,
         attrs: Arc::new(fattrs),
         body: if vattrs.external_body || header.no_method_body { None } else { Some(vir_body) },
@@ -320,6 +392,16 @@ pub(crate) fn check_item_const<'tcx>(
     }
     let body = find_body(ctxt, body_id);
     let vir_body = body_to_vir(ctxt, body_id, body, mode, vattrs.external_body)?;
+
+    let is_string_literal = match &vir_body.x {
+        vir::ast::ExprX::Const(vir::ast::Constant::StrSlice(val, _)) => {
+            let mut global_strings = ctxt.global_strings.borrow_mut();
+            global_strings.insert(id, val.clone());
+            true
+        }, 
+        _ => false
+    };
+    
     let ret_name = Arc::new(RETURN_VALUE.to_string());
     let ret =
         spanned_new(span, ParamX { name: ret_name, typ: typ.clone(), mode: mode, is_mut: false });
@@ -340,6 +422,7 @@ pub(crate) fn check_item_const<'tcx>(
         broadcast_forall: None,
         mask_spec: MaskSpec::NoSpec,
         is_const: true,
+        is_string_literal,
         publish: get_publish(&vattrs),
         attrs: Default::default(),
         body: if vattrs.external_body { None } else { Some(vir_body) },
@@ -407,6 +490,7 @@ pub(crate) fn check_foreign_item_fn<'tcx>(
         broadcast_forall: None,
         mask_spec: MaskSpec::NoSpec,
         is_const: false,
+        is_string_literal: false,
         publish: None,
         attrs: Default::default(),
         body: None,

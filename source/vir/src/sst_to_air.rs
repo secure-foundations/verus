@@ -311,6 +311,7 @@ pub(crate) fn constant_to_expr(_ctx: &Ctx, constant: &crate::ast::Constant) -> E
     match constant {
         crate::ast::Constant::Bool(b) => Arc::new(ExprX::Const(Constant::Bool(*b))),
         crate::ast::Constant::Nat(s) => Arc::new(ExprX::Const(Constant::Nat(s.clone()))),
+        crate::ast::Constant::StrSlice(_, _) => panic!("should be handled elsewhere"),
     }
 }
 
@@ -1596,8 +1597,7 @@ pub fn body_stm_to_air(
         &mut assigned,
         &mut _modified,
         stm,
-    );
-
+    );    
     let mut stmts = stm_to_stmts(ctx, &mut state, &stm);
 
     if has_mut_params {

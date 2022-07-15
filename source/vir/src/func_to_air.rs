@@ -1,6 +1,6 @@
 use crate::ast::{
-    Function, FunctionKind, GenericBoundX, Ident, Idents, Mode, Param, ParamX, Params,
-    SpannedTyped, Typ, TypX, Typs, VirErr,
+    Constant, Function, FunctionKind, FunctionX, GenericBoundX, Ident, Idents, Mode, Param, ParamX,
+    Params, SpannedTyped, Typ, TypX, Typs, VirErr,
 };
 use crate::ast_util::QUANT_FORALL;
 use crate::context::Ctx;
@@ -433,7 +433,7 @@ pub fn func_axioms_to_air(
     match function.x.mode {
         Mode::Spec => {
             // Body
-            if public_body {
+            if public_body && !function.x.is_string_literal {
                 if let Some(body) = &function.x.body {
                     func_body_to_air(ctx, &mut decl_commands, &mut check_commands, function, body)?;
                 }
@@ -572,7 +572,7 @@ pub enum FuncDefPhase {
 }
 
 pub fn func_def_to_air(
-    ctx: &Ctx,
+    ctx: &mut Ctx,
     function: &Function,
     phase: FuncDefPhase,
     checking_recommends: bool,
@@ -692,6 +692,23 @@ pub fn func_def_to_air(
                 state.local_decls.push(decl.clone());
             }
 
+            if function.x.is_const && function.x.is_string_literal {
+                let spanned = &*function.clone();
+                let x = &spanned.x;
+                let mut valid = false;
+                if let FunctionX { body: Some(arc_val), .. } = x {
+                    let val = &(&*arc_val.clone()).x;
+                    if let crate::ast::ExprX::Const(Constant::StrSlice(_,_)) = val {
+                        valid = true;
+                    }
+                }
+                if !valid {
+                    panic!("Expected a strlit");
+                }
+
+                return Ok((Arc::new(vec![]), vec![]));
+            }
+
             let (commands, snap_map) = crate::sst_to_air::body_stm_to_air(
                 ctx,
                 &function.span,
@@ -711,7 +728,6 @@ pub fn func_def_to_air(
                 function.x.attrs.nonlinear,
                 function.x.attrs.spinoff_prover,
             );
-
             state.finalize();
             Ok((Arc::new(commands), snap_map))
         }
