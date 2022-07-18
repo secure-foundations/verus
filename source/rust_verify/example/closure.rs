@@ -94,22 +94,57 @@ fn main() {
 //
 // That is, the user who holds a Fn can make stronger assumptions and do more things,
 // but there are the most restrictions when declaring a Fn.
-//
-// As usual, we can mostly rely on Rust's borrow-checking here.
-// However, this has some implications for verification at the declaration site.
-// In particular, what context gets inherited?
 
-// Fn is the easiest. If a function is Fn, then that means it only takes shared-borrows
-// (no &mut borrows) to anything in the surrounding context.
-// That means we can just inherit all known verification facts from the context.
-
-// (Note that this isn't _really_ about being Fn.
-// Being Fn just means the function can be called while shared-borrowed, which isn't
-// really the point here.
+// From the caller's perspective, Fn gives you the most power:
 //
-// It's better to say, the same conditions that let you declare a closure as Fn -
-// that is, the function only takes shared borrows to captured variables - 
-// also let you get this ability to capture the context.)
+//
+//  |   FnOnce                |------->                           (can be called at least once)
+//  |
+//  |
+//  |   FnMut                 |------->   |------>   |------>     (may be called multiple times, in sequence)
+//  |
+//  |
+//  |   Fn                    |------->   |------>                (may be called multiple times, via a & reference
+//  |                             |-------->                      meaning multiple calls may occur simultaneously)
+//  |                         |----------->  |----->
+//  v
+//    (more abilities)
+//
+//
+
+// At the declarion site, Fn means that that there are more restrictions
+//
+//    (more abilities)
+//  ^
+//  |
+//  |  FnOnce       - may consume variables
+//  |
+//  |
+//  |  FnMut        - may mutate variables (which are mutably-borrowed)
+//  |
+//  |
+//  |  Fn           - may not mutate variables (all borrows are shared borrows)
+//  |
+//  |
+//    (more restrictions)
+
+// For the purposes of verification, we don't actually care about variable
+// consumption at all. The verifier treats all moves as if they were copies.
+// What really matters, for verifications' sake, is whether anything is mutably borrowed.
+
+//  * If the closure doesn't do any mutable borrows, then verification can just import
+//    import all the surrounding proof context at the point where it's declared.
+//    (Such a closure may or may not be Fn - it is still allowed to _move_ stuff.
+//
+//  ****** First draft of closure implementation can start with all the above - the rest
+//  ****** is more advanced and probably used less often.
+//
+//  * If the closure *does* to mutable borrows, then the state of those variables might
+//    change over time. In this case, the function is sort of like a while loop and we
+//    can handle with invariants.
+
+
+// Example: closure that takes no mutable borrows.
 
 fn test_fn() {
     let x = 5;
@@ -171,20 +206,25 @@ fn test_fn_once() {
     let mut x = 4;
 
     let mut t = || {
+        // we need some kind of flag to enable this behavior which will tell Verus to ensure
+        // that this function is FnOnce (not FnMut or Fn)
+        called_at_most_once;
+
         // Although the closure mutates x, this function can only be called once.
         // So we can still assume that `x` looks the same way it does at the declaration
         // of the closure.
         assert(x == 4);
 
         x += 2;
-
-        // note: there needs to be some way for the user to "opt in" to such behavior.
-        // In doing so, verus will create an additional restriction that the function
-        // cannot be marked FnMut.
     };
 
     t();
     // t();     // would be disallowed by borrow-checker
+
+    // Question: how to reason about the state of local variables after
+    // the borrow expires?
+    // A FnOnce function might be called exactly 0 or 1 times.
+    assert(x == 4 || x == 6);
 }
 
 // In summary, the rules are:
@@ -196,7 +236,11 @@ fn test_fn_once() {
 //       but if we do, then we must not allow the closure to be FnMut
 //       (i.e., the strongest trait we can give it is FnOnce).
 //
-//    3. If we don't do (2), we can still reason about mutated variables via invariants.
+//    3. If the user doesnt't do (2), we can still reason about mutated variables via invariants.
+//
+//    4. The `move` keyword on a closure doesn't have any effect on the verification of its body.
+//       However `move` does mean that if the closure mutates any variables, this should be ignored
+//       for verification of code *after* the closure.
 
 // Questions:
 // 
@@ -214,3 +258,33 @@ fn test_fn_once() {
 //
 //  4. What knobs do we provide for the user to have control over what context they get?
 //     (Similar question may apply to 'while' loops.)
+
+
+
+
+
+// Possible answer to #3:
+
+fn foo() {
+    let mut num_times_called = 0;
+    fn f = || {
+        with STATE = 0; // initial state
+        invariant STATE == num_times_called,
+        ensures STATE = old(STATE) + 1,
+
+        num_times_called += 1;
+        proof { STATE += 1; }
+    };
+
+    assert(f.STATE == 0);
+    f();
+    assert(f.STATE == 1);
+    f();
+    assert(f.STATE == 2);
+    f();
+    assert(f.STATE == 3);
+
+    // borrow expire
+
+    assert(num_times_called == 3);
+}
