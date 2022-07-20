@@ -20,6 +20,7 @@ extern crate rustc_span;
 extern crate rustc_trait_selection;
 extern crate rustc_typeck;
 extern crate smallvec;
+extern crate lazy_static;
 
 mod attributes;
 pub mod config;
@@ -41,3 +42,4 @@ pub mod singular;
 pub mod typecheck;
 pub mod util;
 pub mod verifier;
+pub mod symbols;
