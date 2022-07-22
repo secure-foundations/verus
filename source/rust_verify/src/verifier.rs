@@ -952,7 +952,14 @@ impl Verifier {
         if self.args.log_all || self.args.log_vir_poly {
             let mut file =
                 self.create_log_file(Some(&module), None, crate::config::VIR_POLY_FILE_SUFFIX)?;
-            vir::printer::write_krate(&mut file, &poly_krate);
+            let vprinter = vir::printer::Printer::new(
+                self.args.vir_log_no_span,
+                self.args.vir_log_no_type,
+                false,
+                self.args.vir_log_no_encoding,
+                self.args.vir_log_pretty,
+            );
+            vprinter.write_krate(&mut file, &poly_krate);
         }
 
         let (time_smt_init, time_smt_run) =
@@ -983,7 +990,14 @@ impl Verifier {
         if self.args.log_all || self.args.log_vir_simple {
             let mut file =
                 self.create_log_file(None, None, crate::config::VIR_SIMPLE_FILE_SUFFIX)?;
-            vir::printer::write_krate(&mut file, &krate);
+            let vprinter = vir::printer::Printer::new(
+                self.args.vir_log_no_span,
+                self.args.vir_log_no_type,
+                false,
+                self.args.vir_log_no_encoding,
+                self.args.vir_log_pretty,
+            );
+            vprinter.write_krate(&mut file, &krate);
         }
 
         #[cfg(debug_assertions)]
@@ -1173,7 +1187,14 @@ impl Verifier {
 
         if self.args.log_all || self.args.log_vir {
             let mut file = self.create_log_file(None, None, crate::config::VIR_FILE_SUFFIX)?;
-            vir::printer::write_krate(&mut file, &vir_crate);
+            let vprinter = vir::printer::Printer::new(
+                self.args.vir_log_no_span,
+                self.args.vir_log_no_type,
+                false,
+                self.args.vir_log_no_encoding,
+                self.args.vir_log_pretty,
+            );
+            vprinter.write_krate(&mut file, &vir_crate);
         }
         vir::well_formed::check_crate(&vir_crate)?;
         let (erasure_modes, inferred_modes) = vir::modes::check_crate(&vir_crate)?;
