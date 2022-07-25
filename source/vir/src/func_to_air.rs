@@ -726,7 +726,8 @@ pub fn func_def_to_air(
                 let mut small_ens_assertions = vec![];
                 for e in req_ens_function.x.ensure.iter() {
                     if crate::split_expression::need_split_expression(ctx, &e.span) {
-                        let ens_exp = crate::ast_to_sst::expr_to_exp(ctx, &state.fun_ssts,  &ens_pars, e)?;
+                        let ens_exp =
+                            crate::ast_to_sst::expr_to_exp(ctx, &state.fun_ssts, &ens_pars, e)?;
                         let error = air::errors::error(crate::def::SPLIT_POST_FAILURE, &e.span);
                         let splitted_exprs = crate::split_expression::split_expr(
                             ctx,
