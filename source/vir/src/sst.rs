@@ -132,9 +132,8 @@ pub struct LocalDeclX {
     pub typ: Typ,
     pub mutable: bool,
 }
-
-impl fmt::Display for ExpX {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl ExpX {
+    pub(crate) fn fmt(&self, f: &mut fmt::Formatter<'_>, no_encoding: bool) -> fmt::Result {
         use ExpX::*;
         match &self {
             Const(c) => match c {
@@ -147,18 +146,36 @@ impl fmt::Display for ExpX {
                 write!(f, "{}({})", fun.path.segments.last().unwrap(), args)
             }
             Unary(op, exp) => match op {
-                UnaryOp::Not => write!(f, "!{}", exp),
+                UnaryOp::Not => write!(f, "!({})", exp),
                 UnaryOp::BitNot => write!(f, "!{}", exp),
                 UnaryOp::Trigger(..) => Ok(()),
-                UnaryOp::Clip(_range) => write!(f, "clip({})", exp),
+                UnaryOp::Clip(_range) => {
+                    if no_encoding {
+                        write!(f, "{}", exp)
+                    } else {
+                        write!(f, "clip({})", exp)
+                    }
+                }
                 UnaryOp::CoerceMode { .. } => Ok(()),
                 UnaryOp::MustBeFinalized => Ok(()),
             },
             UnaryOpr(op, exp) => {
                 use crate::ast::UnaryOpr::*;
                 match op {
-                    Box(_) => write!(f, "box({})", exp),
-                    Unbox(_) => write!(f, "unbox({})", exp),
+                    Box(_) => {
+                        if no_encoding {
+                            write!(f, "{}", exp)
+                        } else {
+                            write!(f, "box({})", exp)
+                        }
+                    }
+                    Unbox(_) => {
+                        if no_encoding {
+                            write!(f, "{}", exp)
+                        } else {
+                            write!(f, "unbox({})", exp)
+                        }
+                    }
                     HasType(t) => write!(f, "{}.has_type({:?})", exp, t),
                     IsVariant { datatype: _, variant } => write!(f, "{}.is_type({})", exp, variant),
                     TupleField { tuple_arity: _, field } => write!(f, "{}.{}", exp, field),
@@ -240,5 +257,11 @@ impl fmt::Display for ExpX {
                 }
             }
         }
+    }
+}
+
+impl fmt::Display for ExpX {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt(f, true) // TODO: change true to false
     }
 }

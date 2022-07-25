@@ -12,29 +12,30 @@ use crate::pervasive::modes::*;
 #[allow(unused_imports)]
 use crate::pervasive::{*, seq::*, vec::*};
 
+verus!{
+
 #[verifier(external)]
 fn main() {
 }
 
-verus!{
 
 // exmaple 0: conjunt
 proof fn test_expansion_very_easy() 
 {
-  let x = 5;
+  let x:int = 5;
   assert((x >= 0) && (x != 5));
   //                  ^^^^^^^
 }
 
 
-// example1: simple function inline
-// 
-// TODO: check the span of `&&&`
-// spec fn is_good_integer(z: int) -> bool 
-// {
-//   &&& z >= 0
-//   &&& z != 5
-// }
+// // example1: simple function inline
+// // 
+// // TODO: check the span of `&&&`
+// // spec fn is_good_integer(z: int) -> bool 
+// // {
+// //   &&& z >= 0
+// //   &&& z != 5
+// // }
 spec fn is_good_integer(z: int) -> bool 
 {
   z >= 0 && z != 5
@@ -49,7 +50,7 @@ proof fn test_expansion_easy()
 
 
 
-// example2: simple `match` inline
+// // example2: simple `match` inline
 spec fn is_good_opt(opt: Option<int>) -> bool
 {
   match opt {
@@ -59,13 +60,13 @@ spec fn is_good_opt(opt: Option<int>) -> bool
 }
 
 proof fn test_expansion_match() {
-  let x = Option::Some(5);
-  let y = Option::Some(4);
+  let x:Option<int> = Option::Some(5);
+  let y:Option<int> = Option::Some(4);
   assert(is_good_opt(x));
 }
 
 
-// example3: 2-level failure
+// // example3: 2-level failure
 spec fn is_good_integer_2(z: int) -> bool 
 {
   z >= 0 && z != 5
@@ -81,14 +82,14 @@ spec fn is_good_option(opt: Option<int>) -> bool
 }
 
 proof fn test_expansion() {
-  let x = Option::Some(5);
-  let y = Option::Some(4);
+  let x:Option<int> = Option::Some(5);
+  let y:Option<int> = Option::Some(4);
   assert(is_good_option(x));
 //^^^^^^ ^^^^^^^^^^^^^^^^^
 }
 
 
-// example4: 3-level failure
+// // example4: 3-level failure
 #[derive(PartialEq, Eq)] 
 pub enum Message {
     Quit(bool),
@@ -134,31 +135,31 @@ spec fn is_good_integer_5(x: int) -> bool
 
 proof fn test_expansion_negate() 
 {
-  let x = 5;
-  assert(is_good_integer_5(x));
+  assert(is_good_integer_5(5));
 //^^^^^^ ^^^^^^^^^^^^^^^^^^
 }
 
 
-// example6: forall
-spec fn seq_bounded_by_length(s1: Seq<int>) -> bool {
-  (forall|i:int| (0 <= i && i < s1.len())  ==> (0 <= s1.index(i) && s1.index(i) < s1.len()))
-//                                                                  ^^^^^^^^^^^^^^^^^^^^^^
-}
+// // example6: forall -> TODO: thread 'rustc' panicked at 'assertion failed: trigs.len() == 0', vir/src/ast_to_sst.rs:238:21
 
-proof fn test_expansion_forall() 
-{
-  let mut ss = Seq::empty();
-  ss = ss.push(0);
-  ss = ss.push(10);
-  assert(seq_bounded_by_length(ss));
-//^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^
-}
+// spec fn seq_bounded_by_length(s1: Seq<int>) -> bool {
+//   (forall|i:int| (0 <= i && i < s1.len())  ==> (0 <= s1.index(i) && s1.index(i) < s1.len()))
+// //                                                                  ^^^^^^^^^^^^^^^^^^^^^^
+// }
+
+// proof fn test_expansion_forall() 
+// {
+//   let mut ss = Seq::empty();
+//   ss = ss.push(0);
+//   ss = ss.push(10);
+//   assert(seq_bounded_by_length(ss));
+// //^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^
+// }
 
 
 
 
-// example7: requires
+// // example7: requires
 spec fn is_good_integer_7(x: int) -> bool 
 {
     x >= 0 && x != 5
@@ -194,7 +195,7 @@ proof fn test_7(x:int) {
 
 
 
-// example8: ensures
+// // example8: ensures
 spec fn is_good_integer_8(x: int) -> bool 
 {
     x >= 0 && x != 5
@@ -222,7 +223,7 @@ proof fn test_ensures_failure(b: bool) -> (good_msg: Message)
 }
 
 
-// example9: opaque/reveal
+// // example9: opaque/reveal
 #[verifier(opaque)]
 spec fn is_good_integer_9(x: int) -> bool 
 //   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Note: this function is opaque
@@ -249,7 +250,7 @@ proof fn test_opaque(b: bool) {
 }
 
 
-// example10: `reveal` does not flow
+// // example10: `reveal` does not flow
 #[verifier(opaque)]
 spec fn is_good_message_10(msg:Message) -> bool {
 //   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Note: this function is opaque
@@ -289,7 +290,8 @@ proof fn test_hide(b: bool)
 
 // example12: publish
 mod M3 {
-  pub closed spec fn is_good_integer(x: builtin::int) -> bool 
+  use builtin::*;
+  pub closed spec fn is_good_integer(x: int) -> bool 
 //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Note: this function is closed at the module boundary
   {
     x >= 0 && x != 5
@@ -337,23 +339,23 @@ proof fn test_reveal_at_ensures(b: bool) -> (good_msg: Message)
 }
 
 
-// example14: respect binder when function inlining
-spec fn positive(yy: int) -> bool {
-  0 < yy
-//^^^^^^
-}
+// example14: respect binder when function inlining -> TODO: thread 'rustc' panicked at 'assertion failed: trigs.len() == 0', vir/src/ast_to_sst.rs:238:21
+// spec fn positive(yy: int) -> bool {
+//   0 < yy
+// //^^^^^^
+// }
 
-spec fn is_good_integer_14(yy: int) -> bool 
-{
-  forall |yy:int| positive(yy)      // shouldn't replace `yy` with `1` 
-//                ^^^^^^^^^^^^  
-}
+// spec fn is_good_integer_14(yy: int) -> bool 
+// {
+//   forall |yy:int| positive(yy)      // shouldn't replace `yy` with `1` 
+// //                ^^^^^^^^^^^^  
+// }
 
-proof fn test_binder_inlining(b: bool) 
-{
-  assert(is_good_integer_14(1));
-//^^^^^^ ^^^^^^^^^^^^^^^^^^^^^
-}
+// proof fn test_binder_inlining(b: bool) 
+// {
+//   assert(is_good_integer_14(1));
+// //^^^^^^ ^^^^^^^^^^^^^^^^^^^^^
+// }
 
 
 // example15: recursive function
@@ -362,7 +364,7 @@ spec fn is_even(p:nat) -> bool
 {
    decreases(p);
    if p == 0 { true }
-   else {!is_even(p-1)}
+   else {!is_even((p-1) as nat)}
 }
 
 proof fn test_rec() {
@@ -372,4 +374,4 @@ proof fn test_rec() {
 }
 
 
-}
+} // verus!

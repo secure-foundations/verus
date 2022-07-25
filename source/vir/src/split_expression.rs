@@ -386,8 +386,8 @@ pub(crate) fn split_expr(
             match res_inlined_exp {
                 Ok(inlined_exp) => {
                     let inlined_tr_exp = TracedExpX::new(
-                        inlined_exp,
-                        exp.trace.secondary_label(&exp.e.span, "inlining this function call"), // TODO(channy1413): pretty print inlined expr
+                        inlined_exp.clone(),
+                        exp.trace.secondary_label(&exp.e.span, format!("{}", inlined_exp)),
                     );
                     return split_expr(ctx, state, &inlined_tr_exp, negated);
                 }
