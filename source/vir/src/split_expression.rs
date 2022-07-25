@@ -385,9 +385,17 @@ pub(crate) fn split_expr(
             let res_inlined_exp = tr_inline_function(ctx, state, fun, exps, &exp.e.span);
             match res_inlined_exp {
                 Ok(inlined_exp) => {
+                    // let new_trace = exp.trace.secondary_label(&exp.e.span, format!("{}", inlined_exp));
+                    let normalized_exp = crate::interpreter::eval_expr(
+                        &inlined_exp,
+                        &HashMap::new(),
+                        100,
+                        crate::ast::ComputeMode::Z3,
+                    )
+                    .unwrap();
                     let inlined_tr_exp = TracedExpX::new(
                         inlined_exp.clone(),
-                        exp.trace.secondary_label(&exp.e.span, format!("{}", inlined_exp)),
+                        exp.trace.secondary_label(&exp.e.span, format!("{}", normalized_exp)),
                     );
                     return split_expr(ctx, state, &inlined_tr_exp, negated);
                 }

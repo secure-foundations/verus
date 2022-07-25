@@ -157,7 +157,13 @@ impl ExpX {
                     }
                 }
                 UnaryOp::CoerceMode { .. } => Ok(()),
-                UnaryOp::MustBeFinalized => Ok(()),
+                UnaryOp::MustBeFinalized => {
+                    if no_encoding {
+                        write!(f, "{}", exp)
+                    } else {
+                        Ok(())
+                    }
+                }
             },
             UnaryOpr(op, exp) => {
                 use crate::ast::UnaryOpr::*;
