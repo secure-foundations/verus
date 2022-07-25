@@ -54,6 +54,11 @@ pub struct Verifier {
     vir_crate: Option<Krate>,
     air_no_span: Option<air::ast::Span>,
     inferred_modes: Option<HashMap<InferMode, Mode>>,
+
+    // proof debugging purposes
+    expand_flag: bool,
+    pub expand_targets: Vec<air::errors::Error>,
+    pub expanded_errors: Vec<Vec<ErrorSpan>>,
 }
 
 #[derive(Debug)]
@@ -177,6 +182,10 @@ impl Verifier {
             vir_crate: None,
             air_no_span: None,
             inferred_modes: None,
+
+            expand_flag: false,
+            expand_targets: vec![],
+            expanded_errors: vec![],
         }
     }
 
@@ -392,7 +401,10 @@ impl Verifier {
                         self.count_errors += 1;
                         invalidity = true;
                     }
-                    compiler.report_error(&error, error_as);
+
+                    if !self.expand_flag || vir::split_expression::is_split_error(&error) {
+                        compiler.report_error(&error, error_as);
+                    }
 
                     if error_as == ErrorAs::Error {
                         let mut errors = vec![ErrorSpan::new_from_air_span(
@@ -408,7 +420,13 @@ impl Verifier {
                             ));
                         }
 
-                        self.errors.push(errors);
+                        if !self.expand_flag {
+                            self.errors.push(errors);
+                            self.expand_targets.push(error.clone());
+                        } else {
+                            self.expanded_errors.push(errors);
+                        }
+
                         if self.args.debug {
                             let mut debugger = Debugger::new(
                                 air_model,
@@ -531,11 +549,13 @@ impl Verifier {
         air_context.set_profile_all(self.args.profile_all);
 
         let rerun_msg = if is_rerun { "_rerun" } else { "" };
+        let expand_msg = if self.expand_flag { "_expand" } else { "" };
         if self.args.log_all || self.args.log_air_initial {
             let file = self.create_log_file(
                 Some(module_path),
                 function_path,
-                format!("{}{}", rerun_msg, crate::config::AIR_INITIAL_FILE_SUFFIX).as_str(),
+                format!("{}{}{}", rerun_msg, expand_msg, crate::config::AIR_INITIAL_FILE_SUFFIX)
+                    .as_str(),
             )?;
             air_context.set_air_initial_log(Box::new(file));
         }
@@ -543,7 +563,8 @@ impl Verifier {
             let file = self.create_log_file(
                 Some(module_path),
                 function_path,
-                format!("{}{}", rerun_msg, crate::config::AIR_FINAL_FILE_SUFFIX).as_str(),
+                format!("{}{}{}", rerun_msg, expand_msg, crate::config::AIR_FINAL_FILE_SUFFIX)
+                    .as_str(),
             )?;
             air_context.set_air_final_log(Box::new(file));
         }
@@ -551,7 +572,7 @@ impl Verifier {
             let file = self.create_log_file(
                 Some(module_path),
                 function_path,
-                format!("{}{}", rerun_msg, crate::config::SMT_FILE_SUFFIX).as_str(),
+                format!("{}{}{}", rerun_msg, expand_msg, crate::config::SMT_FILE_SUFFIX).as_str(),
             )?;
             air_context.set_smt_log(Box::new(file));
         }
@@ -955,8 +976,20 @@ impl Verifier {
             vir::printer::write_krate(&mut file, &poly_krate);
         }
 
+        let before_err_count = self.count_errors;
+        self.expand_targets = vec![]; // flush old errors
+        self.expand_flag = false;
         let (time_smt_init, time_smt_run) =
             self.verify_module(compiler, &poly_krate, module, &mut ctx)?;
+
+        // In the presence of proof error, re-verify this module with splitted failing assertions to get more precise error message.
+        if !self.encountered_vir_error && before_err_count < self.count_errors {
+            ctx.debug_expand_targets = self.expand_targets.to_vec();
+            ctx.expand_flag = true;
+            self.expand_flag = true;
+            self.verify_module(compiler, &poly_krate, module, &mut ctx)?;
+        }
+
         global_ctx = ctx.free();
 
         self.time_smt_init += time_smt_init;

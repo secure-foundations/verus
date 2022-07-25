@@ -1068,7 +1068,7 @@ fn stm_to_stmts(ctx: &Ctx, state: &mut State, stm: &Stm) -> Vec<Stmt> {
                 let e_req = Arc::new(ExprX::Apply(f_req, Arc::new(req_args)));
                 let description = match (ctx.checking_recommends(), &func.x.attrs.custom_req_err) {
                     (true, None) => "recommendation not met".to_string(),
-                    (_, None) => "precondition not satisfied".to_string(),
+                    (_, None) => crate::def::PRECONDITION_FAILURE.to_string(),
                     (_, Some(s)) => s.clone(),
                 };
                 let error = error(description, &stm.span);
@@ -1681,11 +1681,11 @@ pub fn body_stm_to_air(
 
         for ens in enss {
             let error = error_with_label(
-                "postcondition not satisfied".to_string(),
+                crate::def::POSTCONDITION_FAILURE.to_string(),
                 &stm.span,
                 "at the end of the function body".to_string(),
             )
-            .secondary_label(&ens.span, "failed this postcondition".to_string());
+            .secondary_label(&ens.span, crate::def::THIS_POST_FAILED.to_string());
 
             let expr_ctxt = &ExprCtxt::new_mode_bv(ExprMode::Body, is_bit_vector_mode);
             let e = mk_let(&trait_typ_bind, &exp_to_expr(ctx, ens, expr_ctxt));
