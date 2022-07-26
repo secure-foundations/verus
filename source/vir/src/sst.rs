@@ -222,7 +222,7 @@ impl ExpX {
                     },
                 }
             }
-            If(e1, e2, e3) => write!(f, "if {} then {} else {}", e1, e2, e3),
+            If(e1, e2, e3) => write!(f, "(if {} then {} else {})", e1, e2, e3),
             Bind(bnd, exp) => match &bnd.x {
                 BndX::Let(bnds) => {
                     let assigns = bnds
