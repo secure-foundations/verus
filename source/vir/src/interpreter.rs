@@ -1160,7 +1160,16 @@ fn eval_expr_internal(ctx: &Ctx, state: &mut State, exp: &Exp) -> Result<Exp, Vi
                         eval_expr_internal(ctx, state, e3)
                     }
                 }
-                _ => exp_new(If(e1, e2.clone(), e3.clone())),
+                _ => {
+                    let e2 = eval_expr_internal(ctx, state, e2)?;
+                    let e3 = eval_expr_internal(ctx, state, e3)?;
+                    match (&e2.x, &e3.x) {
+                        (Const(Constant::Bool(b2)), Const(Constant::Bool(b3))) if b2 == b3 => {
+                            bool_new(*b2)
+                        }
+                        _ => exp_new(If(e1, e2, e3)),
+                    }
+                }
             }
         }
         Call(fun, typs, args) => {
