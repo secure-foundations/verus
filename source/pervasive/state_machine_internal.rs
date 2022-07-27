@@ -118,7 +118,13 @@ pub fn assert_general_guard_map(b: bool) { requires(b); ensures(b); }
 verus! {
 
 #[doc(hidden)]
+pub open spec fn nat_max(a: nat, b: nat) -> nat {
+    if a > b { a } else { b }
+}
+
+#[doc(hidden)]
 impl<A> Seq<A> {
+    #[verifier(inline)]
     pub open spec fn update_at_index(self, i: int, a: A) -> Self
         recommends
             0 <= i < self.len(),
@@ -132,6 +138,7 @@ impl<A> Seq<A> {
 impl<K, V> Map<K, V> {
     // note that despite the name, this is allowed to insert
 
+    #[verifier(inline)]
     pub open spec fn update_at_index(self, k: K, v: V) -> Self {
         self.insert(k, v)
     }

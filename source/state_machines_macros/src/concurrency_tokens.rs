@@ -75,7 +75,12 @@ fn stored_object_type(field: &Field) -> Type {
         | ShardableType::Map(_, _)
         | ShardableType::PersistentOption(_)
         | ShardableType::PersistentMap(_, _)
+        | ShardableType::PersistentSet(_)
+        | ShardableType::PersistentCount
+        | ShardableType::PersistentBool
         | ShardableType::Multiset(_)
+        | ShardableType::Set(_)
+        | ShardableType::Bool
         | ShardableType::Count => {
             panic!("stored_object_type");
         }
@@ -209,7 +214,7 @@ fn token_struct_stream(
     sm: &SM,
     field: &Field,
     key_ty: Option<&Type>,
-    value_ty: &Type,
+    value_ty: Option<&Type>,
 ) -> TokenStream {
     let tokenname = field_token_type_name(field);
     let insttype = inst_type(sm);
@@ -227,6 +232,11 @@ fn token_struct_stream(
         None => TokenStream::new(),
     };
 
+    let value_field = match value_ty {
+        Some(valeu_ty) => quote! { #[spec] pub value: #value_ty, },
+        None => TokenStream::new(),
+    };
+
     return quote! {
         #[proof]
         #[verifier(unforgeable)]
@@ -234,7 +244,7 @@ fn token_struct_stream(
         pub struct #tokenname#gen {
             #[spec] pub instance: #insttype,
             #key_field
-            #[spec] pub value: #value_ty,
+            #value_field
         }
 
         #impldecl {
@@ -273,11 +283,22 @@ fn get_macro_decl(sm: &SM) -> TokenStream {
             ShardableType::Variable(_)
             | ShardableType::Option(_)
             | ShardableType::Multiset(_)
+            | ShardableType::Set(_)
+            | ShardableType::PersistentSet(_)
+            | ShardableType::PersistentCount
             | ShardableType::PersistentOption(_)
             | ShardableType::Count => {
                 quote!{
                     ($instance:expr => #field_name => $value:expr) => {
                         #mod_path::#sm_name::#field_name { instance: $instance, value: $value }
+                    };
+                }
+            }
+
+            ShardableType::Bool | ShardableType::PersistentBool => {
+                quote!{
+                    ($instance:expr => #field_name) => {
+                        #mod_path::#sm_name::#field_name { instance: $instance }
                     };
                 }
             }
@@ -355,27 +376,33 @@ pub fn output_token_types_and_fns(
                 inst_impl_token_stream.extend(const_fn_stream(field));
             }
             ShardableType::Variable(ty) => {
-                token_stream.extend(token_struct_stream(&bundle.sm, field, None, ty));
+                token_stream.extend(token_struct_stream(&bundle.sm, field, None, Some(ty)));
             }
             ShardableType::NotTokenized(_) => {
                 // don't need to add a struct in this case
             }
             ShardableType::Option(ty) | ShardableType::PersistentOption(ty) => {
-                token_stream.extend(token_struct_stream(&bundle.sm, field, None, ty));
+                token_stream.extend(token_struct_stream(&bundle.sm, field, None, Some(ty)));
             }
             ShardableType::Map(key, val) | ShardableType::PersistentMap(key, val) => {
-                token_stream.extend(token_struct_stream(&bundle.sm, field, Some(key), val));
+                token_stream.extend(token_struct_stream(&bundle.sm, field, Some(key), Some(val)));
             }
             ShardableType::Multiset(ty) => {
-                token_stream.extend(token_struct_stream(&bundle.sm, field, None, ty));
+                token_stream.extend(token_struct_stream(&bundle.sm, field, None, Some(ty)));
+            }
+            ShardableType::Set(ty) | ShardableType::PersistentSet(ty) => {
+                token_stream.extend(token_struct_stream(&bundle.sm, field, None, Some(ty)));
             }
             ShardableType::StorageOption(_) | ShardableType::StorageMap(_, _) => {
                 // storage types don't have tokens; the 'token type' is just the
                 // the type of the field
             }
-            ShardableType::Count => {
+            ShardableType::Count | ShardableType::PersistentCount => {
                 let ty = shardable_type_to_type(field.type_span, &field.stype);
-                token_stream.extend(token_struct_stream(&bundle.sm, field, None, &ty));
+                token_stream.extend(token_struct_stream(&bundle.sm, field, None, Some(&ty)));
+            }
+            ShardableType::Bool | ShardableType::PersistentBool => {
+                token_stream.extend(token_struct_stream(&bundle.sm, field, None, None));
             }
         }
     }
@@ -514,7 +541,7 @@ pub fn exchange_stream(
 
     // Initialize the `params` field of the `Ctxt` object. We'll fill this up
     // later; for now, just create an entry with an empty Vec for each relevant field.
-    let mut init_params = HashMap::new();
+    let mut params = HashMap::new();
     for field in &sm.fields {
         ident_to_field.insert(field.name.to_string(), field.clone());
 
@@ -526,11 +553,18 @@ pub fn exchange_stream(
                 | ShardableType::PersistentOption(_)
                 | ShardableType::PersistentMap(_, _)
                 | ShardableType::Count
+                | ShardableType::PersistentCount
+                | ShardableType::Bool
+                | ShardableType::PersistentBool
+                | ShardableType::Set(_)
+                | ShardableType::PersistentSet(_)
                 | ShardableType::StorageOption(_)
                 | ShardableType::StorageMap(_, _) => {
-                    init_params.insert(field.name.to_string(), Vec::new());
+                    params.insert(field.name.to_string(), Vec::new());
                 }
-                _ => {}
+                ShardableType::Variable(_)
+                | ShardableType::Constant(_)
+                | ShardableType::NotTokenized(_) => { }
             }
         }
     }
@@ -539,7 +573,7 @@ pub fn exchange_stream(
         fields_read: HashSet::new(),
         fields_written: HashSet::new(),
         fields_read_birds_eye: HashSet::new(),
-        params: init_params,
+        params: params,
         requires: Vec::new(),
         ensures: Vec::new(),
         ident_to_field,
@@ -855,12 +889,17 @@ pub fn exchange_stream(
                         ctxt.ensures.push(mk_eq(&lhs, &e));
                     }
                 }
-                ShardableType::Multiset(_)
-                | ShardableType::Option(_)
+                ShardableType::Option(_)
                 | ShardableType::Map(_, _)
-                | ShardableType::PersistentOption(_)
-                | ShardableType::PersistentMap(_, _)
+                | ShardableType::Set(_)
+                | ShardableType::Multiset(_)
                 | ShardableType::Count
+                | ShardableType::Bool
+                | ShardableType::PersistentOption(_)
+                | ShardableType::PersistentSet(_)
+                | ShardableType::PersistentMap(_, _)
+                | ShardableType::PersistentCount
+                | ShardableType::PersistentBool
                 | ShardableType::StorageOption(_)
                 | ShardableType::StorageMap(_, _) => {
                     // These sharding types all use the SpecialOps. The earlier translation
@@ -1006,10 +1045,15 @@ fn get_init_param_input_type(_sm: &SM, field: &Field) -> Option<Type> {
         ShardableType::Constant(_) => None,
         ShardableType::NotTokenized(_) => None,
         ShardableType::Multiset(_) => None,
+        ShardableType::Set(_) => None,
+        ShardableType::Bool => None,
         ShardableType::Option(_) => None,
         ShardableType::Map(_, _) => None,
         ShardableType::PersistentOption(_) => None,
+        ShardableType::PersistentSet(_) => None,
         ShardableType::PersistentMap(_, _) => None,
+        ShardableType::PersistentCount => None,
+        ShardableType::PersistentBool => None,
         ShardableType::Count => None,
         ShardableType::StorageOption(ty) => Some(Type::Verbatim(quote! {
             crate::pervasive::option::Option<#ty>
@@ -1041,17 +1085,24 @@ fn get_init_param_output_type(sm: &SM, field: &Field) -> Option<Type> {
         ShardableType::Variable(_) => Some(field_token_type(&sm, field)),
         ShardableType::Constant(_) => None, // constants handled separately
         ShardableType::NotTokenized(_) => None, // no tokens
-        ShardableType::Count => Some(field_token_type(&sm, field)),
+        ShardableType::Count | ShardableType::PersistentCount => Some(field_token_type(&sm, field)),
         ShardableType::Multiset(_) => {
             let ty = field_token_type(&sm, field);
             Some(Type::Verbatim(quote! {
                 crate::pervasive::multiset::Multiset<#ty>
             }))
         }
-        ShardableType::Option(_) | ShardableType::PersistentOption(_) => {
+        ShardableType::Option(_) | ShardableType::PersistentOption(_)
+        | ShardableType::Bool | ShardableType::PersistentBool => {
             let ty = field_token_type(&sm, field);
             Some(Type::Verbatim(quote! {
                 crate::pervasive::option::Option<#ty>
+            }))
+        }
+        ShardableType::Set(_) | ShardableType::PersistentSet(_) => {
+            let ty = field_token_type(&sm, field);
+            Some(Type::Verbatim(quote! {
+                crate::pervasive::set::Set<#ty>
             }))
         }
         ShardableType::Map(key, _val) | ShardableType::PersistentMap(key, _val) => {
@@ -1725,6 +1776,12 @@ fn token_matches_elt(
             mk_eq(&Expr::Verbatim(quote! {#token_name.key}), &key),
             mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &val),
         ),
+        MonoidElt::SingletonSet(e) => {
+            mk_eq(&Expr::Verbatim(quote!{ #token_name.value }), &e)
+        }
+        MonoidElt::True => {
+            Expr::Verbatim(quote!{ true })
+        }
         MonoidElt::General(e) => match &field.stype {
             ShardableType::Count => mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &e),
             _ => {
@@ -1947,6 +2004,10 @@ fn translate_elt(
             let e = translate_expr(ctxt, e, birds_eye, errors);
             MonoidElt::SingletonMultiset(e)
         }
+        MonoidElt::SingletonSet(e) => {
+            let e = translate_expr(ctxt, e, birds_eye, errors);
+            MonoidElt::SingletonSet(e)
+        }
         MonoidElt::SingletonKV(e1, None) => {
             let e1 = translate_expr(ctxt, e1, birds_eye, errors);
             MonoidElt::SingletonKV(e1, None)
@@ -1955,6 +2016,9 @@ fn translate_elt(
             let e1 = translate_expr(ctxt, e1, birds_eye, errors);
             let e2 = translate_expr(ctxt, e2, birds_eye, errors);
             MonoidElt::SingletonKV(e1, Some(e2))
+        }
+        MonoidElt::True => {
+            MonoidElt::True
         }
         MonoidElt::General(e) => {
             let e = translate_expr(ctxt, e, birds_eye, errors);
@@ -1977,8 +2041,14 @@ fn translate_value_expr(
         MonoidElt::OptionSome(Some(e))
         | MonoidElt::General(e)
         | MonoidElt::SingletonMultiset(e)
+        | MonoidElt::SingletonSet(e)
         | MonoidElt::SingletonKV(_, Some(e)) => Some(translate_expr(ctxt, e, birds_eye, errors)),
         MonoidElt::OptionSome(None) | MonoidElt::SingletonKV(_, None) => None,
+        MonoidElt::True => {
+            // bool is not supported for storage types.
+            // If this ends up getting called I'm not sure what the intent would be.
+            panic!("translate_value_expr called for 'True'");
+        }
     }
 }
 
