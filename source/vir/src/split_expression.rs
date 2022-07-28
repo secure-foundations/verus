@@ -89,7 +89,8 @@ fn subsitute_argument(
                     }
                     Spanned::new(
                         bnd.span.clone(),
-                        BndX::Quant(quant.clone(), bndrs.clone(), Arc::new(replaced_trigs)),
+                        // BndX::Quant(quant.clone(), bndrs.clone(), Arc::new(replaced_trigs)),
+                        BndX::Quant(quant.clone(), bndrs.clone(), Arc::new(vec![])),
                     )
                 }
                 _ => {
@@ -302,10 +303,11 @@ pub(crate) fn split_expr(
         ExpX::Unary(UnaryOp::Not, e1) => {
             let tr_exp = TracedExpX::new(
                 e1.clone(),
-                exp.trace.secondary_label(
-                    &exp.e.span,
-                    "This leftmost boolean-not negated the highlighted expression",
-                ),
+                exp.trace.clone(),
+                // exp.trace.secondary_label(
+                //     &exp.e.span,
+                //     "This leftmost boolean-not negated the highlighted expression",
+                // ),
             );
             return split_expr(ctx, state, &tr_exp, !negated);
         }
@@ -385,7 +387,6 @@ pub(crate) fn split_expr(
             let res_inlined_exp = tr_inline_function(ctx, state, fun, exps, &exp.e.span);
             match res_inlined_exp {
                 Ok(inlined_exp) => {
-                    // let new_trace = exp.trace.secondary_label(&exp.e.span, format!("{}", inlined_exp));
                     let normalized_exp = crate::interpreter::eval_expr(
                         &inlined_exp,
                         &HashMap::new(), // to ensure it inline only once
@@ -393,21 +394,9 @@ pub(crate) fn split_expr(
                         crate::ast::ComputeMode::Z3,
                     )
                     .unwrap();
-                    let more_normalized_exp = crate::interpreter::eval_expr(
-                        &inlined_exp,
-                        &state.fun_ssts, // I think this will inline all the way down
-                        10,
-                        crate::ast::ComputeMode::Z3,
-                    )
-                    .unwrap();
                     let new_trace =
-                        exp.trace.secondary_label(&exp.e.span, format!("{}", inlined_exp));
-                    let new_trace =
-                        new_trace.secondary_label(&exp.e.span, format!("{}", normalized_exp));
-                    let inlined_tr_exp = TracedExpX::new(
-                        inlined_exp.clone(),
-                        new_trace.secondary_label(&exp.e.span, format!("{}", more_normalized_exp)),
-                    );
+                        exp.trace.secondary_label(&exp.e.span, format!("{}", normalized_exp));
+                    let inlined_tr_exp = TracedExpX::new(inlined_exp.clone(), new_trace);
                     return split_expr(ctx, state, &inlined_tr_exp, negated);
                 }
                 Err((sp, msg)) => {
@@ -504,7 +493,10 @@ pub(crate) fn register_splitted_assertions(traced_exprs: TracedExps) -> Vec<Stm>
         return vec![];
     }
     for small_exp in &*traced_exprs {
-        let new_error = small_exp.trace.primary_span(&small_exp.e.span);
+        // when the small expression turns out to be the "localized error", the user might want to see the final inlined expr for `small_exp`
+        let mut new_error = small_exp.trace.primary_span(&small_exp.e.span);
+        new_error = new_error
+            .secondary_label(&small_exp.e.span, format!("failing assertion: `{}`", small_exp.e));
         let additional_assert = StmX::Assert(Some(new_error), small_exp.e.clone());
         stms.push(Spanned::new(small_exp.e.span.clone(), additional_assert));
     }

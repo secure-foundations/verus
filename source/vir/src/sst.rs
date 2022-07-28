@@ -14,7 +14,7 @@ use crate::def::Spanned;
 use crate::interpreter::InterpExp;
 use air::ast::{Binders, Ident, Span};
 use air::errors::Error;
-use std::fmt;
+use std::fmt::{self, format};
 use std::sync::Arc;
 
 pub type Trig = Exps;
@@ -159,6 +159,7 @@ impl ExpX {
                 UnaryOp::CoerceMode { .. } => Ok(()),
                 UnaryOp::MustBeFinalized => {
                     if no_encoding {
+                        // println!("warning: must_be_finalized, {}", exp);
                         write!(f, "{}", exp)
                     } else {
                         Ok(())
@@ -237,9 +238,30 @@ impl ExpX {
                         bnds.iter().map(|b| format!("{}", b.name)).collect::<Vec<_>>().join(", ");
                     write!(f, "(|{}| {})", assigns, exp)
                 }
-                BndX::Quant(..) | BndX::Choose(..) => {
+                BndX::Quant(..) | BndX::Choose(..) if !no_encoding => {
                     write!(f, "Unexpected: {:?}", self)
                 }
+                BndX::Quant(qnt, bndrs, trigs) if no_encoding => {
+                    let mut s: String = match qnt.quant {
+                        air::ast::Quant::Forall => "Forall".to_string(),
+                        air::ast::Quant::Exists => "Exists".to_string(),
+                    };
+                    for bnd in &**bndrs {
+                        s = s + &format!(" {} ", bnd.name);
+                        // s = s + &format!(" {} : {:?} ", bnd.name, bnd.a);
+                    }
+                    // s = s + "triggers: ";
+                    // for trig in &** trigs{
+                    //     for t in &**trig {
+                    //         s = s + &format!(" {t} ")
+                    //     }
+                    // }
+                    write!(f, "{s}, {exp}")
+                }
+                BndX::Choose(bndrs, trigs, exp) if no_encoding => {
+                    write!(f, "choose {:?}", self)
+                }
+                _ => unreachable!(),
             },
             Ctor(_path, id, bnds) => {
                 let args = bnds.iter().map(|b| b.a.to_string()).collect::<Vec<_>>().join(", ");

@@ -987,6 +987,7 @@ impl Verifier {
             ctx.debug_expand_targets = self.expand_targets.to_vec();
             ctx.expand_flag = true;
             self.expand_flag = true;
+            println!("rerun for err localization");
             self.verify_module(compiler, &poly_krate, module, &mut ctx)?;
         }
 

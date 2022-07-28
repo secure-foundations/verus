@@ -235,6 +235,9 @@ impl State {
             }
             ExpX::Bind(bnd, body) => match &bnd.x {
                 BndX::Quant(quant, bs, trigs) => {
+                    if trigs.len() != 0 {
+                        println!("err trig found, {}", exp);
+                    }
                     assert!(trigs.len() == 0);
                     let mut vars: Vec<Ident> = Vec::new();
                     for b in bs.iter() {
