@@ -33,7 +33,9 @@ verus!{
 spec fn is_increasing_and_positive(x:int, y:int, z: int) -> bool 
 {
   0 <= x
-//^^^^^^  failing assertion: `0 <= spec_index(s1, 0) - spec_index(s2, 0)`
+//|   |
+//|   0 <= spec_index(s1, 0) - spec_index(s2, 0)
+//|   Detailed failing assertion: `0 <= spec_index(s1, 0) - spec_index(s2, 0)`
   && x <= y
   && y <= z
 }
@@ -52,13 +54,15 @@ proof fn test_propagation_1_level()
 // example2: propagating values from the call site to the inner-most spec function
 spec fn twice_and_positive(a:int, b:int) -> bool {
   0 < a
-//^^^^^ failing assertion: `Forall i , 0 <= i && i < len(view(v1)) ==> 0 < spec_index(view(v1), i)`
+//|   |
+//|   0 < spec_index(view(v1), i)
+//|   Detailed failing assertion: `Forall i , 0 <= i && i < len(view(v1)) ==> 0 < spec_index(view(v1), i)`
   && a <= b
 }
 
 spec fn seq_twice(s1: Seq<int>, s2: Seq<int>) -> bool {
   (s1.len() == s2.len()) && (forall |i:int| (0 <= i < s1.len()) ==> twice_and_positive(s1[i], s2[i]))
-//                                                                  -------------------------------- 0 < spec_index(view(v1), i) && spec_index(view(v1), i) <= spec_index(view(v2), i)
+//                                                                  -------------------------------- twice_and_positive(spec_index(view(v1), i), spec_index(view(v2), i))
 }
 
 fn test_propagation_2_level() 
@@ -72,8 +76,9 @@ fn test_propagation_2_level()
   v2.push(2);
   v2.push(4);
   assert(seq_twice(v1@, v2@));
-//^^^^^^ ------------------- len(view(v1)) == len(view(v2)) && Forall i , 0 <= i && i < len(view(v1)) ==> twice_and_positive(spec_index(view(v1), i), spec_index(view(v2), i))
+//^^^^^^ ------------------- seq_twice(view(v1), view(v2))      // TODO: remove this label
 }
+
 
 
 // example3: don't replace parameter with argument unless its simplified 

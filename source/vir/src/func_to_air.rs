@@ -734,6 +734,7 @@ pub fn func_def_to_air(
                             &state, // use the state after `body` translation to get the fuel info
                             &crate::split_expression::TracedExpX::new(
                                 ens_exp.clone(),
+                                ens_exp.clone(),
                                 error.clone(),
                             ),
                             false,

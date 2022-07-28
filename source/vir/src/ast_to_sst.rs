@@ -706,7 +706,11 @@ fn stm_call(
             let exprs = crate::split_expression::split_expr(
                 ctx,
                 state,
-                &crate::split_expression::TracedExpX::new(args[0].0.clone(), error.clone()),
+                &crate::split_expression::TracedExpX::new(
+                    args[0].0.clone(),
+                    args[0].0.clone(),
+                    error.clone(),
+                ),
                 false,
             );
             if exprs.is_ok() {
@@ -733,7 +737,11 @@ fn stm_call(
                 let exprs = crate::split_expression::split_expr(
                     ctx,
                     state,
-                    &crate::split_expression::TracedExpX::new(exp_subsituted, error.clone()),
+                    &crate::split_expression::TracedExpX::new(
+                        exp_subsituted.clone(),
+                        exp_subsituted.clone(),
+                        error.clone(),
+                    ),
                     false,
                 );
                 if exprs.is_ok() {

@@ -252,24 +252,29 @@ fn tr_inline_function(
 }
 
 // Record relevant information when splitting expressions:
-//   1) when inlining function, log call stack into `trace`
-//   2) boolean negation
+//   1) `trace`: when inlining function, log call stack into `trace`
+//   2) `e_display`: highlighted expression in terms of the original call site.
+//       when localizing, we try to point exact location,
+//       however, the highlighted expression might not be the exact expression that was handed to the Z3
+//       For example,  A => (B && C) is splitted into A => B and A => C. When A => C fails, only C will be highlighted
+//       See `implies`, `If`, `Bind`
 pub type TracedExp = Arc<TracedExpX>;
 pub type TracedExps = Arc<Vec<TracedExp>>;
 pub struct TracedExpX {
-    pub e: Exp,
+    pub e: Exp,         // Exp to hand to Z3
+    pub e_display: Exp, // Exp to display
     pub trace: air::errors::Error,
 }
 impl TracedExpX {
-    pub fn new(e: Exp, trace: air::errors::Error) -> TracedExp {
-        Arc::new(TracedExpX { e, trace })
+    pub fn new(e: Exp, e_display: Exp, trace: air::errors::Error) -> TracedExp {
+        Arc::new(TracedExpX { e, e_display, trace })
     }
 }
 
 fn negate_atom(exp: TracedExp) -> TracedExp {
     let negated_expx = ExpX::Unary(UnaryOp::Not, exp.e.clone());
     let negated_exp = SpannedTyped::new(&exp.e.span, &exp.e.typ, negated_expx);
-    TracedExpX::new(negated_exp, exp.trace.clone())
+    TracedExpX::new(negated_exp.clone(), negated_exp.clone(), exp.trace.clone())
 }
 
 fn mk_atom(e: TracedExp, negated: bool) -> TracedExps {
@@ -303,6 +308,7 @@ pub(crate) fn split_expr(
         ExpX::Unary(UnaryOp::Not, e1) => {
             let tr_exp = TracedExpX::new(
                 e1.clone(),
+                e1.clone(),
                 exp.trace.clone(),
                 // exp.trace.secondary_label(
                 //     &exp.e.span,
@@ -317,13 +323,13 @@ pub(crate) fn split_expr(
                     let es1 = split_expr(
                         ctx,
                         state,
-                        &TracedExpX::new(e1.clone(), exp.trace.clone()),
+                        &TracedExpX::new(e1.clone(), e1.clone(), exp.trace.clone()),
                         false,
                     )?;
                     let es2 = split_expr(
                         ctx,
                         state,
-                        &TracedExpX::new(e2.clone(), exp.trace.clone()),
+                        &TracedExpX::new(e2.clone(), e2.clone(), exp.trace.clone()),
                         false,
                     )?;
                     return Ok(merge_two_es(es1, es2));
@@ -333,13 +339,13 @@ pub(crate) fn split_expr(
                     let es1 = split_expr(
                         ctx,
                         state,
-                        &TracedExpX::new(e1.clone(), exp.trace.clone()),
+                        &TracedExpX::new(e1.clone(), e1.clone(), exp.trace.clone()),
                         true,
                     )?;
                     let es2 = split_expr(
                         ctx,
                         state,
-                        &TracedExpX::new(e2.clone(), exp.trace.clone()),
+                        &TracedExpX::new(e2.clone(), e2.clone(), exp.trace.clone()),
                         true,
                     )?;
                     return Ok(merge_two_es(es1, es2));
@@ -349,14 +355,15 @@ pub(crate) fn split_expr(
                     let es2 = split_expr(
                         ctx,
                         state,
-                        &TracedExpX::new(e2.clone(), exp.trace.clone()),
+                        &TracedExpX::new(e2.clone(), e2.clone(), exp.trace.clone()),
                         false,
                     )?;
                     let mut splitted: Vec<TracedExp> = vec![];
                     for e in &*es2 {
                         let new_e = ExpX::Binary(BinaryOp::Implies, e1.clone(), e.e.clone());
                         let new_exp = SpannedTyped::new(&e.e.span, &exp.e.typ, new_e);
-                        let new_tr_exp = TracedExpX::new(new_exp, e.trace.clone());
+                        let new_tr_exp =
+                            TracedExpX::new(new_exp, e.e_display.clone(), e.trace.clone());
                         splitted.push(new_tr_exp);
                     }
                     return Ok(Arc::new(splitted));
@@ -367,14 +374,15 @@ pub(crate) fn split_expr(
                     let es1 = split_expr(
                         ctx,
                         state,
-                        &TracedExpX::new(e1.clone(), exp.trace.clone()),
+                        &TracedExpX::new(e1.clone(), e1.clone(), exp.trace.clone()),
                         false, // instead of pushing negation, wrap negation outside
                     )?;
                     let mut splitted: Vec<TracedExp> = vec![];
                     for e in &*es1 {
                         let new_e = ExpX::Binary(BinaryOp::Implies, e.e.clone(), e2.clone());
                         let new_exp = SpannedTyped::new(&e.e.span, &exp.e.typ, new_e);
-                        let new_tr_exp = TracedExpX::new(new_exp, e.trace.clone());
+                        let new_tr_exp =
+                            TracedExpX::new(new_exp, e.e_display.clone(), e.trace.clone());
                         splitted.push(negate_atom(new_tr_exp)); // negate here
                     }
                     return Ok(Arc::new(splitted));
@@ -387,22 +395,29 @@ pub(crate) fn split_expr(
             let res_inlined_exp = tr_inline_function(ctx, state, fun, exps, &exp.e.span);
             match res_inlined_exp {
                 Ok(inlined_exp) => {
-                    let normalized_exp = crate::interpreter::eval_expr(
-                        &inlined_exp,
-                        &HashMap::new(), // to ensure it inline only once
-                        10,
-                        crate::ast::ComputeMode::Z3,
-                    )
-                    .unwrap();
+                    // let normalized_exp = crate::interpreter::eval_expr(
+                    //     &inlined_exp,
+                    //     &HashMap::new(), // to ensure it inline only once
+                    //     10,
+                    //     crate::ast::ComputeMode::Z3,
+                    // )
+                    // .unwrap();
+
+                    // let call_replaced =
                     let new_trace =
-                        exp.trace.secondary_label(&exp.e.span, format!("{}", normalized_exp));
-                    let inlined_tr_exp = TracedExpX::new(inlined_exp.clone(), new_trace);
+                        exp.trace.secondary_label(&exp.e.span, format!("{}", exp.e.clone()));
+
+                    let inlined_tr_exp =
+                        TracedExpX::new(inlined_exp.clone(), inlined_exp.clone(), new_trace);
                     return split_expr(ctx, state, &inlined_tr_exp, negated);
                 }
                 Err((sp, msg)) => {
                     // if the function inlining failed, treat as atom
-                    let not_inlined_exp =
-                        TracedExpX::new(exp.e.clone(), exp.trace.secondary_label(&sp, msg));
+                    let not_inlined_exp = TracedExpX::new(
+                        exp.e.clone(),
+                        exp.e.clone(),
+                        exp.trace.secondary_label(&sp, msg),
+                    );
                     return Ok(mk_atom(not_inlined_exp, negated));
                 }
             }
@@ -419,25 +434,30 @@ pub(crate) fn split_expr(
             let es1 = split_expr(
                 ctx,
                 state,
-                &TracedExpX::new(then_exp.clone(), exp.trace.clone()),
+                &TracedExpX::new(then_exp.clone(), e1.clone(), exp.trace.clone()),
                 negated,
             )?;
             let es2 = split_expr(
                 ctx,
                 state,
-                &TracedExpX::new(else_exp.clone(), exp.trace.clone()),
+                &TracedExpX::new(else_exp.clone(), e2.clone(), exp.trace.clone()),
                 negated,
             )?;
             return Ok(merge_two_es(es1, es2));
         }
         ExpX::UnaryOpr(uop, e1) => {
-            let es1 =
-                split_expr(ctx, state, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated)?;
+            let es1 = split_expr(
+                ctx,
+                state,
+                &TracedExpX::new(e1.clone(), e1.clone(), exp.trace.clone()),
+                negated,
+            )?;
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 let new_e = ExpX::UnaryOpr(uop.clone(), e.e.clone());
                 let new_exp = SpannedTyped::new(&e.e.span, &exp.e.typ, new_e);
-                let new_tr_exp = TracedExpX::new(new_exp, e.trace.clone());
+                let new_tr_exp =
+                    TracedExpX::new(new_exp.clone(), e.e_display.clone(), e.trace.clone());
                 splitted.push(new_tr_exp);
             }
             return Ok(Arc::new(splitted));
@@ -466,13 +486,17 @@ pub(crate) fn split_expr(
                 // TODO(channy1413): consider splittig further: Lambda, Choose
                 _ => return Ok(mk_atom(exp.clone(), negated)),
             };
-            let es1 =
-                split_expr(ctx, state, &TracedExpX::new(e1.clone(), exp.trace.clone()), negated)?;
+            let es1 = split_expr(
+                ctx,
+                state,
+                &TracedExpX::new(e1.clone(), e1.clone(), exp.trace.clone()),
+                negated,
+            )?;
             let mut splitted: Vec<TracedExp> = vec![];
             for e in &*es1 {
                 let new_expx = ExpX::Bind(new_bnd.clone(), e.e.clone());
                 let new_exp = SpannedTyped::new(&e.e.span, &exp.e.typ, new_expx);
-                let new_tr_exp = TracedExpX::new(new_exp, e.trace.clone());
+                let new_tr_exp = TracedExpX::new(new_exp, e.e_display.clone(), e.trace.clone());
                 splitted.push(new_tr_exp);
             }
             return Ok(Arc::new(splitted));
@@ -494,9 +518,14 @@ pub(crate) fn register_splitted_assertions(traced_exprs: TracedExps) -> Vec<Stm>
     }
     for small_exp in &*traced_exprs {
         // when the small expression turns out to be the "localized error", the user might want to see the final inlined expr for `small_exp`
-        let mut new_error = small_exp.trace.primary_span(&small_exp.e.span);
-        new_error = new_error
-            .secondary_label(&small_exp.e.span, format!("failing assertion: `{}`", small_exp.e));
+        let mut new_error =
+            small_exp.trace.primary_label(&small_exp.e.span, format!("{}", small_exp.e_display));
+        //                                                                        e_display.span?
+        // if small_exp.e != small_exp.display_e
+        new_error = new_error.secondary_label(
+            &small_exp.e.span,
+            format!("Detailed failing assertion: `{}`", small_exp.e),
+        );
         let additional_assert = StmX::Assert(Some(new_error), small_exp.e.clone());
         stms.push(Spanned::new(small_exp.e.span.clone(), additional_assert));
     }

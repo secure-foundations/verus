@@ -14,7 +14,7 @@ use crate::def::Spanned;
 use crate::interpreter::InterpExp;
 use air::ast::{Binders, Ident, Span};
 use air::errors::Error;
-use std::fmt::{self, format};
+use std::fmt::{self};
 use std::sync::Arc;
 
 pub type Trig = Exps;
