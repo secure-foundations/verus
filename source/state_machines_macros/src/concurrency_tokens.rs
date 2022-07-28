@@ -233,7 +233,7 @@ fn token_struct_stream(
     };
 
     let value_field = match value_ty {
-        Some(valeu_ty) => quote! { #[spec] pub value: #value_ty, },
+        Some(value_ty) => quote! { #[spec] pub value: #value_ty, },
         None => TokenStream::new(),
     };
 
