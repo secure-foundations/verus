@@ -327,6 +327,26 @@ impl<T> RwLock<T> {
         let mut v: Vec<AtomicU64<DistRwLock::ref_counts<T>>> = Vec::new();
         let mut i: usize = 0;
 
+        assert_forall_by(|j: int| {
+            requires(i <= j && j < rc_width);
+            ensures(#[trigger] ref_counts_tokens.dom().contains(j)
+                  && equal(ref_counts_tokens.index(j).instance, inst)
+                  && equal(ref_counts_tokens.index(j).key, j)
+                  && equal(ref_counts_tokens.index(j).value, 0));
+
+            assert(ref_counts_tokens.dom().contains(j));
+            assert(equal(ref_counts_tokens.index(j).instance, inst));
+            assert(equal(ref_counts_tokens.index(j).key, j));
+            assert(equal(ref_counts_tokens.index(j).value, 0));
+        });
+
+        assert(forall(|j: int| i <= j && j < rc_width >>= (
+                    #[trigger] ref_counts_tokens.dom().contains(j)
+                    && equal(ref_counts_tokens.index(j).instance, inst)
+                    && equal(ref_counts_tokens.index(j).key, j)
+                    && equal(ref_counts_tokens.index(j).value, 0)
+                )));
+
         while i < rc_width {
             invariant([
                 v.len() == i as int,
