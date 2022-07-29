@@ -339,6 +339,7 @@ pub enum InvAtomicity {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AssertQueryMode {
     NonLinear,
+    BitVector,
 }
 
 #[derive(Clone, Copy, Debug)]
