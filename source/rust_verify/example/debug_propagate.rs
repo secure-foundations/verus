@@ -21,10 +21,11 @@ use crate::pervasive::{*, seq::*, vec::*};
 // However, sometimes the propagated expressions can get large(e.g. several harmless "&& true")
 // To help these situations, we can normalize the expressions before displaying it to the end user.
 
-// We can also consider propagating it to the inner level if it's not readily readable (e.g. match case with inner fields usage --
+// If it's not readily readable, we can simply not propagate it to the inner level if (e.g. match case with inner fields usage --
 // -- something like   !(good_msg.is_type(Quit)) ==> good_msg.is_type(Move)==> let x = good_msg.x in let y = good_msg.y in !(x - y == 5))
 // which is just a match case  `Message::Move{x, y} => is_good_integer(x-y),`
 // we can just use the formal parameter in this cases, while using propagated values for other parameters
+// For now, I will skip propagating outside expression into `Binders`, which seems to make readability much less
 
 
 verus!{
@@ -61,8 +62,8 @@ spec fn twice_and_positive(a:int, b:int) -> bool {
 }
 
 spec fn seq_twice(s1: Seq<int>, s2: Seq<int>) -> bool {
-  (s1.len() == s2.len()) && (forall |i:int| (0 <= i < s1.len()) ==> twice_and_positive(s1[i], s2[i]))
-//                                                                  -------------------------------- twice_and_positive(spec_index(view(v1), i), spec_index(view(v2), i))
+  (s1.len() == s2.len()) && (forall |i:int|   (0 <= i < s1.len()) ==> twice_and_positive(s1[i], s2[i]))  // TODO: #![auto] 
+//                                                                    -------------------------------- twice_and_positive(spec_index(view(v1), i), spec_index(view(v2), i))
 }
 
 fn test_propagation_2_level() 
@@ -76,14 +77,22 @@ fn test_propagation_2_level()
   v2.push(2);
   v2.push(4);
   assert(seq_twice(v1@, v2@));
-//^^^^^^ ------------------- seq_twice(view(v1), view(v2))      // TODO: remove this label
+//^^^^^^
 }
 
 
 
-// example3: don't replace parameter with argument unless its simplified 
 
 
+// TODO: `if let` in ensures
+
+
+// TODO: split while loop invariant
+
+
+
+
+// example4: don't replace parameter with argument unless its simplified 
 
 
 

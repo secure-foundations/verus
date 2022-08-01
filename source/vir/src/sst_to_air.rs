@@ -1386,7 +1386,8 @@ fn stm_to_stmts(ctx: &Ctx, state: &mut State, stm: &Stm) -> Vec<Stmt> {
             }
             if !ctx.checking_recommends() {
                 for (span, inv) in invs.iter() {
-                    let error = error("invariant not satisfied at end of loop body", span);
+                    println!("{:?}", span);
+                    let error = error(crate::def::INV_FAIL_LOOP_END, span);
                     let inv_stmt = StmtX::Assert(error, inv.clone());
                     air_body.push(Arc::new(inv_stmt));
                 }
@@ -1416,7 +1417,7 @@ fn stm_to_stmts(ctx: &Ctx, state: &mut State, stm: &Stm) -> Vec<Stmt> {
             let mut stmts: Vec<Stmt> = Vec::new();
             if !ctx.checking_recommends() {
                 for (span, inv) in invs.iter() {
-                    let error = error("invariant not satisfied before loop", span);
+                    let error = error(crate::def::INV_FAIL_LOOP_FRONT, span);
                     let inv_stmt = StmtX::Assert(error, inv.clone());
                     stmts.push(Arc::new(inv_stmt));
                 }

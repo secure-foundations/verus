@@ -712,6 +712,7 @@ fn stm_call(
                     error.clone(),
                 ),
                 false,
+                0,
             );
             if exprs.is_ok() {
                 let exprs = exprs.unwrap();
@@ -743,6 +744,7 @@ fn stm_call(
                         error.clone(),
                     ),
                     false,
+                    1, // to display inlined exp of requires with original context
                 );
                 if exprs.is_ok() {
                     let exprs = exprs.unwrap();
@@ -1423,10 +1425,48 @@ fn expr_to_stm_opt(
             let (mut stms1, e1) = expr_to_stm_opt(ctx, state, body)?;
             state.pop_fuel_scope();
             check_unit_or_never(&e1)?;
-            let (check_recommends, invs): (Vec<Vec<Stm>>, Vec<Exp>) =
+            let (check_recommends, mut invs): (Vec<Vec<Stm>>, Vec<Exp>) =
                 vec_map_result(invs, |e| expr_to_pure_exp_check(ctx, state, e))?
                     .into_iter()
                     .unzip();
+            // TODO: add tailored error messages produced while splitting
+            // however, it is hard to register `Assert` with tailored error messages as in `requires` `assert` `ensures`
+            // since actual VC is added in `sst_to_air.rs`
+            //
+            if !ctx.checking_recommends() && ctx.expand_flag {
+                println!("split inv");
+                println!("len: {}", invs.len());
+                let mut split_invs: Vec<Exp> = vec![];
+                for e in invs.iter() {
+                    if crate::split_expression::need_split_expression(ctx, &e.span) {
+                        let error = air::errors::error(crate::def::SPLIT_INV_FAILURE, &e.span);
+                        let splitted_exprs = crate::split_expression::split_expr(
+                            ctx,
+                            &state, // use the state after `body` translation to get the fuel info
+                            &crate::split_expression::TracedExpX::new(
+                                e.clone(),
+                                e.clone(),
+                                error.clone(),
+                            ),
+                            false,
+                            0,
+                        );
+                        if splitted_exprs.is_ok() {
+                            println!("split ok");
+                            let splitted_exprs = splitted_exprs.unwrap();
+                            for exp in &**splitted_exprs {
+                                println!("splitted {}", exp.e);
+                                println!("splitted {:?} ", exp.e.span);
+                                split_invs.push(exp.e.clone());
+                            }
+                        }
+                    }
+                    split_invs.push(e.clone());
+                }
+                invs = split_invs;
+                println!("len after split: {}", invs.len());
+            }
+
             if ctx.checking_recommends() {
                 let check_recommends: Vec<Stm> = check_recommends.into_iter().flatten().collect();
                 stms1.splice(0..0, check_recommends);

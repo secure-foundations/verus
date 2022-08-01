@@ -738,6 +738,7 @@ pub fn func_def_to_air(
                                 error.clone(),
                             ),
                             false,
+                            0,
                         );
                         if splitted_exprs.is_ok() {
                             let splitted_exprs = splitted_exprs.unwrap();

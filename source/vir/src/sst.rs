@@ -241,7 +241,7 @@ impl ExpX {
                 BndX::Quant(..) | BndX::Choose(..) if !no_encoding => {
                     write!(f, "Unexpected: {:?}", self)
                 }
-                BndX::Quant(qnt, bndrs, trigs) if no_encoding => {
+                BndX::Quant(qnt, bndrs, _trigs) if no_encoding => {
                     let mut s: String = match qnt.quant {
                         air::ast::Quant::Forall => "Forall".to_string(),
                         air::ast::Quant::Exists => "Exists".to_string(),
@@ -258,7 +258,7 @@ impl ExpX {
                     // }
                     write!(f, "{s}, {exp}")
                 }
-                BndX::Choose(bndrs, trigs, exp) if no_encoding => {
+                BndX::Choose(_bndrs, _trigs, _exp) if no_encoding => {
                     write!(f, "choose {:?}", self)
                 }
                 _ => unreachable!(),
