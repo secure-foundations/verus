@@ -1352,10 +1352,10 @@ fn collection_relation_fns_stream(sm: &SM, field: &Field) -> TokenStream {
                 #[verifier(returns(proof))]
                 #[verifier(external_body)]
                 pub fn join(#[proof] self, #[proof] other: Self) -> Self {
-                    ::builtin::requires(equal(self.instance, other.instance));
+                    ::builtin::requires(::builtin::equal(self.instance, other.instance));
                     ::builtin::ensures(|s: Self|
-                        equal(s.instance, self.instance)
-                        && equal(s.value, self.value + other.value)
+                        ::builtin::equal(s.instance, self.instance)
+                        && ::builtin::equal(s.value, self.value + other.value)
                     );
                     ::std::unimplemented!();
                 }
@@ -1364,10 +1364,23 @@ fn collection_relation_fns_stream(sm: &SM, field: &Field) -> TokenStream {
                 pub proof fn split(tracked self, i: nat) -> tracked (Self, Self) {
                     ::builtin::requires(i <= self.value);
                     ::builtin::ensures(|s: (Self, Self)|
-                        equal(s.0.instance, self.instance)
-                        && equal(s.1.instance, self.instance)
-                        && equal(s.0.value, i)
-                        && equal(s.1.value as int, self.value - i)
+                        ::builtin::equal(s.0.instance, self.instance)
+                        && ::builtin::equal(s.1.instance, self.instance)
+                        && ::builtin::equal(s.0.value, i)
+                        && ::builtin::equal(s.1.value as int, self.value - i)
+                    );
+                    ::std::unimplemented!();
+                }
+            }
+        }
+        ShardableType::PersistentCount => {
+            quote! {
+                #[verifier(external_body)]
+                pub proof fn weaken(tracked self, i: nat) -> tracked Self {
+                    ::builtin::requires(i <= self.value);
+                    ::builtin::ensures(|s: Self|
+                        ::builtin::equal(s.instance, self.instance)
+                        && ::builtin::equal(s.value, i)
                     );
                     ::std::unimplemented!();
                 }
@@ -1829,7 +1842,7 @@ fn token_matches_elt(
         MonoidElt::SingletonSet(e) => mk_eq(&Expr::Verbatim(quote! { #token_name.value }), &e),
         MonoidElt::True => Expr::Verbatim(quote! { true }),
         MonoidElt::General(e) => match &field.stype {
-            ShardableType::Count => mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &e),
+            ShardableType::Count | ShardableType::PersistentCount => mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &e),
             _ => {
                 let token_value = if token_is_ref {
                     Expr::Verbatim(quote! { *#token_name })

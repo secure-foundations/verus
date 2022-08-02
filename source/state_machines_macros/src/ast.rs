@@ -434,6 +434,7 @@ impl ShardableType {
     pub fn is_count(&self) -> bool {
         match self {
             ShardableType::Count => true,
+            ShardableType::PersistentCount => true,
             _ => false,
         }
     }
