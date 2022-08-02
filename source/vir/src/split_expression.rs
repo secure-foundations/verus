@@ -160,7 +160,7 @@ pub(crate) fn pure_ast_expression_to_sst(ctx: &Ctx, body: &Expr, params: &Params
     crate::ast_to_sst::expr_to_exp_as_spec(
         &ctx,
         &HashMap::new(),
-        &crate::func_to_air::params_to_pars(params, false),
+        &crate::func_to_air::params_to_pars(params, true), // REVIEW: is `true` here desirable?
         &body,
     )
     .expect("pure_ast_expression_to_sst")

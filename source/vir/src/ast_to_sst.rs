@@ -1456,7 +1456,6 @@ fn expr_to_stm_opt(
                             let splitted_exprs = splitted_exprs.unwrap();
                             for exp in &**splitted_exprs {
                                 println!("splitted {}", exp.e);
-                                println!("splitted {:?} ", exp.e.span);
                                 split_invs.push(exp.e.clone());
                             }
                         }

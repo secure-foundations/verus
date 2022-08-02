@@ -84,10 +84,14 @@ fn test_propagation_2_level()
 
 
 
+
+
+
+
+
+
 // TODO: `if let` in ensures
 
-
-// TODO: split while loop invariant
 
 
 

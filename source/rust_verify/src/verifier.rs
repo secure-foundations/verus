@@ -983,7 +983,10 @@ impl Verifier {
             self.verify_module(compiler, &poly_krate, module, &mut ctx)?;
 
         // In the presence of proof error, re-verify this module with splitted failing assertions to get more precise error message.
-        if !self.encountered_vir_error && before_err_count < self.count_errors {
+        if self.args.expand_errors
+            && !self.encountered_vir_error
+            && before_err_count < self.count_errors
+        {
             ctx.debug_expand_targets = self.expand_targets.to_vec();
             ctx.expand_flag = true;
             self.expand_flag = true;

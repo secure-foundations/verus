@@ -1386,7 +1386,6 @@ fn stm_to_stmts(ctx: &Ctx, state: &mut State, stm: &Stm) -> Vec<Stmt> {
             }
             if !ctx.checking_recommends() {
                 for (span, inv) in invs.iter() {
-                    println!("{:?}", span);
                     let error = error(crate::def::INV_FAIL_LOOP_END, span);
                     let inv_stmt = StmtX::Assert(error, inv.clone());
                     air_body.push(Arc::new(inv_stmt));
