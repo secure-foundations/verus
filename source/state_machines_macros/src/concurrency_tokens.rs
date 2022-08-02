@@ -100,9 +100,19 @@ fn option_relation_post_condition_name(field: &Field) -> Ident {
     Ident::new("option_agree", field.name.span())
 }
 
+fn bool_relation_post_condition_name(field: &Field) -> Ident {
+    Ident::new("bool_agree", field.name.span())
+}
+
 fn option_relation_post_condition_qualified_name(sm: &SM, field: &Field) -> Type {
     let ty = field_token_type_turbofish(sm, field);
     let name = option_relation_post_condition_name(field);
+    Type::Verbatim(quote! { #ty::#name })
+}
+
+fn bool_relation_post_condition_qualified_name(sm: &SM, field: &Field) -> Type {
+    let ty = field_token_type_turbofish(sm, field);
+    let name = bool_relation_post_condition_name(field);
     Type::Verbatim(quote! { #ty::#name })
 }
 
@@ -564,7 +574,7 @@ pub fn exchange_stream(
                 }
                 ShardableType::Variable(_)
                 | ShardableType::Constant(_)
-                | ShardableType::NotTokenized(_) => { }
+                | ShardableType::NotTokenized(_) => {}
             }
         }
     }
@@ -1092,8 +1102,10 @@ fn get_init_param_output_type(sm: &SM, field: &Field) -> Option<Type> {
                 crate::pervasive::multiset::Multiset<#ty>
             }))
         }
-        ShardableType::Option(_) | ShardableType::PersistentOption(_)
-        | ShardableType::Bool | ShardableType::PersistentBool => {
+        ShardableType::Option(_)
+        | ShardableType::PersistentOption(_)
+        | ShardableType::Bool
+        | ShardableType::PersistentBool => {
             let ty = field_token_type(&sm, field);
             Some(Type::Verbatim(quote! {
                 crate::pervasive::option::Option<#ty>
@@ -1126,7 +1138,7 @@ fn add_initialization_output_conditions(
     param_value: Expr,
 ) {
     match &field.stype {
-        ShardableType::Variable(_) | ShardableType::Count => {
+        ShardableType::Variable(_) | ShardableType::Count | ShardableType::PersistentCount => {
             inst_eq_enss.push(Expr::Verbatim(quote! {
                 ::builtin::equal(#param_value.instance, #inst_value)
             }));
@@ -1137,6 +1149,8 @@ fn add_initialization_output_conditions(
         }
         ShardableType::Option(_)
         | ShardableType::Map(_, _)
+        | ShardableType::Bool
+        | ShardableType::PersistentBool
         | ShardableType::PersistentOption(_)
         | ShardableType::PersistentMap(_, _)
         | ShardableType::Multiset(_) => {
@@ -1164,6 +1178,12 @@ fn relation_for_collection_of_internal_tokens(
     match &field.stype {
         ShardableType::Option(_) | ShardableType::PersistentOption(_) => {
             let fn_name = option_relation_post_condition_qualified_name(sm, field);
+            Expr::Verbatim(quote! {
+                #fn_name(#param_value, #given_value, #inst_value)
+            })
+        }
+        ShardableType::Bool | ShardableType::PersistentBool => {
+            let fn_name = bool_relation_post_condition_qualified_name(sm, field);
             Expr::Verbatim(quote! {
                 #fn_name(#param_value, #given_value, #inst_value)
             })
@@ -1217,6 +1237,33 @@ fn collection_relation_fns_stream(sm: &SM, field: &Field) -> TokenStream {
                             ::builtin::equal(token.instance, instance)
                             && opt.is_Some()
                             && ::builtin::equal(token.value, opt.get_Some_0())
+                        }
+                    }
+                }
+            }
+        }
+        ShardableType::Bool | ShardableType::PersistentBool => {
+            let fn_name = bool_relation_post_condition_name(field);
+            let token_ty = field_token_type(sm, field);
+            let inst_ty = inst_type(sm);
+            let option_token_ty = Type::Verbatim(quote! {
+                crate::pervasive::option::Option<#token_ty>
+            });
+
+            // Predicate to check the option values agree:
+            //
+            // b              token_opt
+            // false          None
+            // true           Some(Token { instance: instance })
+
+            quote! {
+                pub open spec fn #fn_name(token_opt: #option_token_ty, b: ::std::primitive::bool, instance: #inst_ty) -> bool {
+                    match token_opt {
+                        crate::pervasive::option::Option::None => {
+                            !b
+                        }
+                        crate::pervasive::option::Option::Some(token) => {
+                            b && ::builtin::equal(token.instance, instance)
                         }
                     }
                 }
@@ -1679,7 +1726,10 @@ fn translate_split_kind(ctxt: &mut Ctxt, sk: &mut SplitKind, errors: &mut Vec<Er
 fn field_token_collection_type(sm: &SM, field: &Field) -> Type {
     let ty = field_token_type(sm, field);
     match &field.stype {
-        ShardableType::Option(_) | ShardableType::PersistentOption(_) => {
+        ShardableType::Option(_)
+        | ShardableType::PersistentOption(_)
+        | ShardableType::Bool
+        | ShardableType::PersistentBool => {
             Type::Verbatim(quote! { crate::pervasive::option::Option<#ty> })
         }
 
@@ -1692,7 +1742,7 @@ fn field_token_collection_type(sm: &SM, field: &Field) -> Type {
         }
 
         _ => {
-            panic!("field_token_collection_type expected option/map/multiset");
+            panic!("field_token_collection_type expected option/map/multiset/bool");
         }
     }
 }
@@ -1776,12 +1826,8 @@ fn token_matches_elt(
             mk_eq(&Expr::Verbatim(quote! {#token_name.key}), &key),
             mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &val),
         ),
-        MonoidElt::SingletonSet(e) => {
-            mk_eq(&Expr::Verbatim(quote!{ #token_name.value }), &e)
-        }
-        MonoidElt::True => {
-            Expr::Verbatim(quote!{ true })
-        }
+        MonoidElt::SingletonSet(e) => mk_eq(&Expr::Verbatim(quote! { #token_name.value }), &e),
+        MonoidElt::True => Expr::Verbatim(quote! { true }),
         MonoidElt::General(e) => match &field.stype {
             ShardableType::Count => mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &e),
             _ => {
@@ -2017,9 +2063,7 @@ fn translate_elt(
             let e2 = translate_expr(ctxt, e2, birds_eye, errors);
             MonoidElt::SingletonKV(e1, Some(e2))
         }
-        MonoidElt::True => {
-            MonoidElt::True
-        }
+        MonoidElt::True => MonoidElt::True,
         MonoidElt::General(e) => {
             let e = translate_expr(ctxt, e, birds_eye, errors);
             MonoidElt::General(e)

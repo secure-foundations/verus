@@ -287,8 +287,7 @@ fn is_allowed_in_update_in_normal_transition(stype: &ShardableType) -> bool {
         | ShardableType::Count
         | ShardableType::PersistentCount
         | ShardableType::Bool
-        | ShardableType::PersistentBool
-        => false,
+        | ShardableType::PersistentBool => false,
     }
 }
 
@@ -395,17 +394,13 @@ fn op_matches_type(stype: &ShardableType, elt: &MonoidElt) -> bool {
             _ => false,
         },
 
-        ShardableType::Set(_)
-        | ShardableType::PersistentSet(_)
-        => match elt {
+        ShardableType::Set(_) | ShardableType::PersistentSet(_) => match elt {
             MonoidElt::General(_) => true,
             MonoidElt::SingletonSet(_) => true,
             _ => false,
         },
 
-        ShardableType::Bool
-        | ShardableType::PersistentBool
-        => match elt {
+        ShardableType::Bool | ShardableType::PersistentBool => match elt {
             MonoidElt::General(_) => true,
             MonoidElt::True => true,
             _ => false,

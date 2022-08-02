@@ -26,8 +26,12 @@ pub fn assert_let_pattern(b: bool) { requires(b); ensures(b); }
 // SpecialOps
 
 #[proof]
-#[verifier(custom_req_err("unable to prove inherent safety condition: to add a value into Some(_), field must be None before the update"))]
+#[verifier(custom_req_err("unable to prove inherent safety condition: to add a value Some(_), field must be None before the update"))]
 pub fn assert_add_option(b: bool) { requires(b); ensures(b); }
+
+#[proof]
+#[verifier(custom_req_err("unable to prove inherent safety condition: to add a value `true`, field must be `false` before the update"))]
+pub fn assert_add_bool(b: bool) { requires(b); ensures(b); }
 
 #[proof]
 #[verifier(custom_req_err("unable to prove inherent safety condition: the given key must be absent from the map before the update"))]
@@ -70,6 +74,10 @@ pub fn assert_guard_map(b: bool) { requires(b); ensures(b); }
 #[proof]
 #[verifier(custom_req_err("unable to prove inherent safety condition: the optional values being composed cannot both be Some(_)"))]
 pub fn assert_general_add_option(b: bool) { requires(b); ensures(b); }
+
+#[proof]
+#[verifier(custom_req_err("unable to prove inherent safety condition: the boolean values being composed cannot both be `true`"))]
+pub fn assert_general_add_bool(b: bool) { requires(b); ensures(b); }
 
 #[proof]
 #[verifier(custom_req_err("unable to prove inherent safety condition: the key domains of the maps being composed must be disjoint"))]

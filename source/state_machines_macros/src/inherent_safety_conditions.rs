@@ -86,7 +86,11 @@ fn check_inherent_condition_for_special_op(
             }
         }
         MonoidStmtType::Add | MonoidStmtType::Deposit => match coll_type {
-            CollectionType::Multiset | CollectionType::Nat | CollectionType::PersistentNat | CollectionType::PersistentBool | CollectionType::PersistentSet => {
+            CollectionType::Multiset
+            | CollectionType::Nat
+            | CollectionType::PersistentNat
+            | CollectionType::PersistentBool
+            | CollectionType::PersistentSet => {
                 if user_gave_proof_body {
                     let name = op.stmt.name();
                     let cname = coll_type.name();

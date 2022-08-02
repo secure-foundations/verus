@@ -745,8 +745,7 @@ pub fn shardable_type_to_type(span: Span, stype: &ShardableType) -> Type {
         | ShardableType::StorageOption(ty) => {
             Type::Verbatim(quote_spanned! { span => crate::pervasive::option::Option<#ty> })
         }
-        ShardableType::Set(ty)
-        | ShardableType::PersistentSet(ty) => {
+        ShardableType::Set(ty) | ShardableType::PersistentSet(ty) => {
             Type::Verbatim(quote_spanned! { span => crate::pervasive::set::Set<#ty> })
         }
         ShardableType::Map(key, val)
@@ -761,7 +760,7 @@ pub fn shardable_type_to_type(span: Span, stype: &ShardableType) -> Type {
             Type::Verbatim(quote_spanned! { span => ::builtin::nat })
         }
         ShardableType::Bool | ShardableType::PersistentBool => {
-            Type::Verbatim(quote_spanned! { span => ::std::bool })
+            Type::Verbatim(quote_spanned! { span => ::std::primitive::bool })
         }
     }
 }

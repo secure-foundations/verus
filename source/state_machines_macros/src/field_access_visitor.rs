@@ -254,7 +254,7 @@ fn visit_special_op(
                 ident_to_field,
             );
         }
-        SpecialOp { stmt: _, elt: MonoidElt::True } => { }
+        SpecialOp { stmt: _, elt: MonoidElt::True } => {}
         SpecialOp { stmt: _, elt: MonoidElt::OptionSome(None) } => {
             // nothing to do
         }

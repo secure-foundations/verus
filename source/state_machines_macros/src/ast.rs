@@ -455,8 +455,7 @@ impl ShardableType {
             | ShardableType::PersistentBool
             | ShardableType::Count
             | ShardableType::Bool
-            | ShardableType::Set(_)
-            => false,
+            | ShardableType::Set(_) => false,
         }
     }
 
@@ -466,8 +465,7 @@ impl ShardableType {
             | ShardableType::PersistentOption(_)
             | ShardableType::PersistentSet(_)
             | ShardableType::PersistentCount
-            | ShardableType::PersistentBool
-            => true,
+            | ShardableType::PersistentBool => true,
 
             ShardableType::Variable(_)
             | ShardableType::Constant(_)
