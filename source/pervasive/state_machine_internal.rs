@@ -30,6 +30,10 @@ pub fn assert_let_pattern(b: bool) { requires(b); ensures(b); }
 pub fn assert_add_option(b: bool) { requires(b); ensures(b); }
 
 #[proof]
+#[verifier(custom_req_err("unable to prove inherent safety condition: to add a singleton set, the value must not be in the set before the update"))]
+pub fn assert_add_set(b: bool) { requires(b); ensures(b); }
+
+#[proof]
 #[verifier(custom_req_err("unable to prove inherent safety condition: to add a value `true`, field must be `false` before the update"))]
 pub fn assert_add_bool(b: bool) { requires(b); ensures(b); }
 
@@ -76,6 +80,10 @@ pub fn assert_guard_map(b: bool) { requires(b); ensures(b); }
 pub fn assert_general_add_option(b: bool) { requires(b); ensures(b); }
 
 #[proof]
+#[verifier(custom_req_err("unable to prove inherent safety condition: the sets being composed must be disjoint"))]
+pub fn assert_general_add_set(b: bool) { requires(b); ensures(b); }
+
+#[proof]
 #[verifier(custom_req_err("unable to prove inherent safety condition: the boolean values being composed cannot both be `true`"))]
 pub fn assert_general_add_bool(b: bool) { requires(b); ensures(b); }
 
@@ -86,7 +94,6 @@ pub fn assert_general_add_map(b: bool) { requires(b); ensures(b); }
 #[proof]
 #[verifier(custom_req_err("unable to prove inherent safety condition: the maps being composed must agree on their values for any key in both domains"))]
 pub fn assert_general_add_persistent_map(b: bool) { requires(b); ensures(b); }
-
 
 #[proof]
 #[verifier(custom_req_err("unable to prove inherent safety condition: if the previous value and the newly added values are both Some(_), then their values must agree"))]

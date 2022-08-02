@@ -100,6 +100,10 @@ fn option_relation_post_condition_name(field: &Field) -> Ident {
     Ident::new("option_agree", field.name.span())
 }
 
+fn set_relation_post_condition_name(field: &Field) -> Ident {
+    Ident::new("set_agree", field.name.span())
+}
+
 fn bool_relation_post_condition_name(field: &Field) -> Ident {
     Ident::new("bool_agree", field.name.span())
 }
@@ -107,6 +111,12 @@ fn bool_relation_post_condition_name(field: &Field) -> Ident {
 fn option_relation_post_condition_qualified_name(sm: &SM, field: &Field) -> Type {
     let ty = field_token_type_turbofish(sm, field);
     let name = option_relation_post_condition_name(field);
+    Type::Verbatim(quote! { #ty::#name })
+}
+
+fn set_relation_post_condition_qualified_name(sm: &SM, field: &Field) -> Type {
+    let ty = field_token_type_turbofish(sm, field);
+    let name = set_relation_post_condition_name(field);
     Type::Verbatim(quote! { #ty::#name })
 }
 
@@ -1148,10 +1158,12 @@ fn add_initialization_output_conditions(
             }));
         }
         ShardableType::Option(_)
-        | ShardableType::Map(_, _)
+        | ShardableType::PersistentOption(_)
         | ShardableType::Bool
         | ShardableType::PersistentBool
-        | ShardableType::PersistentOption(_)
+        | ShardableType::Set(_)
+        | ShardableType::PersistentSet(_)
+        | ShardableType::Map(_, _)
         | ShardableType::PersistentMap(_, _)
         | ShardableType::Multiset(_) => {
             ensures.push(relation_for_collection_of_internal_tokens(
@@ -1178,6 +1190,12 @@ fn relation_for_collection_of_internal_tokens(
     match &field.stype {
         ShardableType::Option(_) | ShardableType::PersistentOption(_) => {
             let fn_name = option_relation_post_condition_qualified_name(sm, field);
+            Expr::Verbatim(quote! {
+                #fn_name(#param_value, #given_value, #inst_value)
+            })
+        }
+        ShardableType::Set(_) | ShardableType::PersistentSet(_) => {
+            let fn_name = set_relation_post_condition_qualified_name(sm, field);
             Expr::Verbatim(quote! {
                 #fn_name(#param_value, #given_value, #inst_value)
             })
@@ -1239,6 +1257,45 @@ fn collection_relation_fns_stream(sm: &SM, field: &Field) -> TokenStream {
                             && ::builtin::equal(token.value, opt.get_Some_0())
                         }
                     }
+                }
+            }
+        }
+        ShardableType::Set(ty) | ShardableType::PersistentSet(ty) => {
+            let fn_name = set_relation_post_condition_name(field);
+            let constructor_name = field_token_type_turbofish(sm, field);
+            let token_ty = field_token_type(sm, field);
+            let inst_ty = inst_type(sm);
+            let set_token_ty = Type::Verbatim(quote! {
+                crate::pervasive::set::Set<#token_ty>
+            });
+            let set_normal_ty = Type::Verbatim(quote! {
+                crate::pervasive::set::Set<#ty>
+            });
+
+            // Predicate to check the set values agree:
+            //
+            // set            token_set
+            // {x, y}         { { instance, x }, { instance, y } }
+
+            quote! {
+                pub open spec fn #fn_name(token_set: #set_token_ty, set: #set_normal_ty, instance: #inst_ty) -> bool {
+                    ::builtin::forall(|elem: #ty| {
+                        ::builtin::imply(
+                            (#[trigger] set.contains(elem)),
+                            token_set.contains(
+                                #constructor_name {
+                                    instance: instance,
+                                    value: elem,
+                                }
+                            )
+                        )
+                    })
+                    && ::builtin::forall(|tok: #token_ty| {
+                        ::builtin::imply(
+                            (#[trigger] token_set.contains(tok)),
+                            equal(tok.instance, instance) && set.contains(tok.value)
+                        )
+                    })
                 }
             }
         }
@@ -1750,6 +1807,10 @@ fn field_token_collection_type(sm: &SM, field: &Field) -> Type {
             Type::Verbatim(quote! { crate::pervasive::map::Map<#key, #ty> })
         }
 
+        ShardableType::Set(_) | ShardableType::PersistentSet(_) => {
+            Type::Verbatim(quote! { crate::pervasive::set::Set<#ty> })
+        }
+
         ShardableType::Multiset(_) => {
             Type::Verbatim(quote! { crate::pervasive::multiset::Multiset<#ty> })
         }
@@ -1842,7 +1903,9 @@ fn token_matches_elt(
         MonoidElt::SingletonSet(e) => mk_eq(&Expr::Verbatim(quote! { #token_name.value }), &e),
         MonoidElt::True => Expr::Verbatim(quote! { true }),
         MonoidElt::General(e) => match &field.stype {
-            ShardableType::Count | ShardableType::PersistentCount => mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &e),
+            ShardableType::Count | ShardableType::PersistentCount => {
+                mk_eq(&Expr::Verbatim(quote! {#token_name.value}), &e)
+            }
             _ => {
                 let token_value = if token_is_ref {
                     Expr::Verbatim(quote! { *#token_name })

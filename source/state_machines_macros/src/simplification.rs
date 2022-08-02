@@ -571,8 +571,8 @@ fn expr_can_add(stype: &ShardableType, cur: &Expr, elt: &MonoidElt) -> Option<Ex
                 ShardableType::Bool => Some(Expr::Verbatim(quote! {
                     (!(#cur) || !(#e))
                 })),
-                ShardableType::Set(e) => Some(Expr::Verbatim(quote! {
-                    (#cur).union(#e)
+                ShardableType::Set(_) => Some(Expr::Verbatim(quote! {
+                    (#cur).disjoint(#e)
                 })),
 
                 _ => {
@@ -673,7 +673,7 @@ fn expr_add(stype: &ShardableType, cur: &Expr, elt: &MonoidElt) -> Expr {
                     (#cur).add(#e)
                 }),
 
-                ShardableType::PersistentSet(_) => Expr::Verbatim(quote! {
+                ShardableType::Set(_) => Expr::Verbatim(quote! {
                     ((#cur).union(#e))
                 }),
 
@@ -766,8 +766,8 @@ fn expr_ge(stype: &ShardableType, cur: &Expr, elt: &MonoidElt, pat_opt: &Option<
                 (#e).le(#cur)
             }),
 
-            ShardableType::Set(_) => Expr::Verbatim(quote! {
-                (#e).subset(#cur)
+            ShardableType::Set(_) | ShardableType::PersistentSet(_) => Expr::Verbatim(quote! {
+                (#e).subset_of(#cur)
             }),
 
             ShardableType::Count | ShardableType::PersistentCount => Expr::Verbatim(quote! {
